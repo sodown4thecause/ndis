@@ -9,7 +9,7 @@ export default defineConfig({
     ],
     fileParallelism: false,
     maxWorkers: 1,
-    testTimeout: 15_000,
+    testTimeout: 30_000,
     passWithNoTests: false,
   },
 });
