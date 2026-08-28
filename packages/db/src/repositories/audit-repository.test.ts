@@ -9,6 +9,7 @@ describe("audit repository input", () => {
   it("keeps chain links and computed hashes out of the public append input", () => {
     expectTypeOf<AuditEventInput>().not.toHaveProperty("previousHash");
     expectTypeOf<AuditEventInput>().not.toHaveProperty("eventHash");
+    expectTypeOf<AuditEventInput>().not.toHaveProperty("retentionUntil");
     expectTypeOf<FoundationTransaction>().not.toHaveProperty("updateAuditEvent");
     expectTypeOf<FoundationTransaction>().not.toHaveProperty("deleteAuditEvent");
   });
@@ -32,18 +33,27 @@ describe("audit repository input", () => {
 
   it("locks the tenant chain before reading its head and inserting", async () => {
     const calls: string[] = [];
+    let lockKey: unknown;
+    let headTenantId: unknown;
     const dialect = new PgDialect();
     const db = {
       async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
         const tx = {
           async execute(query: Parameters<PgDialect["sqlToQuery"]>[0]) {
-            calls.push(dialect.sqlToQuery(query).sql.includes("pg_advisory_xact_lock") ? "lock" : "execute");
+            const generated = dialect.sqlToQuery(query);
+            if (generated.sql.includes("pg_advisory_xact_lock")) {
+              lockKey = generated.params[0];
+              calls.push("lock");
+            } else {
+              calls.push("execute");
+            }
           },
           select() {
             return {
               from() {
                 return {
-                  where() {
+                  where(predicate: Parameters<PgDialect["sqlToQuery"]>[0]) {
+                    headTenantId = dialect.sqlToQuery(predicate).params[0];
                     return {
                       orderBy() {
                         return {
@@ -85,7 +95,7 @@ describe("audit repository input", () => {
 
     const store = createDrizzleFoundationStore(db as Parameters<typeof createDrizzleFoundationStore>[0]);
     await store.transaction((tx) => tx.appendAuditEvent({
-      tenantId: "00000000-0000-4000-8000-000000000001",
+      tenantId: "00000000-0000-4000-8000-00000000000A",
       actorReference: "system",
       action: "note",
       entityType: "tenant",
@@ -94,5 +104,7 @@ describe("audit repository input", () => {
     }));
 
     expect(calls).toEqual(["lock", "head", "insert"]);
+    expect(lockKey).toBe("attesta:audit-chain:00000000-0000-4000-8000-00000000000a");
+    expect(headTenantId).toBe("00000000-0000-4000-8000-00000000000a");
   });
 });

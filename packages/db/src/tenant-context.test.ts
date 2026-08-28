@@ -10,6 +10,12 @@ describe("tenant context", () => {
     );
   });
 
+  it("normalizes UUID spelling at the tenant boundary", () => {
+    expect(assertTenantId("00000000-0000-4000-8000-00000000000A")).toBe(
+      "00000000-0000-4000-8000-00000000000a",
+    );
+  });
+
   it("rejects a malformed tenant identifier before database access", async () => {
     let transactionCalled = false;
     const db = {

@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
   createTenantBootstrap,
+  computeAuditHash,
   verifyAuditChain,
   type AuditVerification,
   type NewTenantInput,
 } from "@attesta/domain";
 import type { AuditEventInput, PersistedAuditEventInput } from "../repositories/audit-repository";
+import { assertTenantId } from "../tenant-context";
 
 export type TenantRecord = { id: string; name: string };
 export type SiteRecord = { id: string; tenantId: string; name: string };
@@ -18,6 +20,7 @@ export type ParticipantRecord = {
   preferredFormat: string;
 };
 export type AuditEventRecord = PersistedAuditEventInput & { id: string; createdAt: Date; createdOrder: number };
+export type AuditEventClock = () => Date;
 
 export type FoundationTransaction = {
   setTenantContext(tenantId: string): Promise<void>;
@@ -25,7 +28,7 @@ export type FoundationTransaction = {
   createSite(tenantId: string, name: string): Promise<SiteRecord>;
   createWorker(tenantId: string, siteId: string, name: string): Promise<WorkerRecord>;
   createParticipant(tenantId: string, siteId: string, name: string, preferredFormat: string): Promise<ParticipantRecord>;
-  appendAuditEvent(input: AuditEventInput): Promise<AuditEventRecord>;
+  appendAuditEvent(input: AuditEventInput, now?: AuditEventClock): Promise<AuditEventRecord>;
   listAuditEvents(tenantId: string): Promise<AuditEventRecord[]>;
 };
 
@@ -47,7 +50,11 @@ export type FoundationService = {
   verifyTenantAuditChain(tenantId: string): Promise<AuditVerification>;
 };
 
-export function createFoundationService(store: FoundationStore): FoundationService {
+export type FoundationServiceOptions = { now?: AuditEventClock };
+
+export function createFoundationService(store: FoundationStore, options: FoundationServiceOptions = {}): FoundationService {
+  const now = options.now ?? (() => new Date());
+
   return {
     bootstrapTenant(input, actorReference = "system"): Promise<TenantBootstrapResult> {
       const seed = createTenantBootstrap(input);
@@ -65,7 +72,7 @@ export function createFoundationService(store: FoundationStore): FoundationServi
             entityType,
             entityId,
             payload,
-          });
+          }, now);
           auditEvents.push(event);
         };
 
@@ -90,24 +97,27 @@ export function createFoundationService(store: FoundationStore): FoundationServi
     },
 
     appendAuditEvent(input) {
+      const normalizedInput = { ...input, tenantId: assertTenantId(input.tenantId) };
+
       return store.transaction(async (tx) => {
-        await tx.setTenantContext(input.tenantId);
-        return tx.appendAuditEvent({
-          tenantId: input.tenantId,
-          actorReference: input.actorReference,
-          action: input.action,
-          entityType: input.entityType,
-          entityId: input.entityId,
-          payload: input.payload,
-          retentionUntil: input.retentionUntil,
-        });
+        await tx.setTenantContext(normalizedInput.tenantId);
+        return tx.appendAuditEvent(normalizedInput, now);
       });
     },
 
     verifyTenantAuditChain(tenantId) {
+      const normalizedTenantId = assertTenantId(tenantId);
+
       return store.transaction(async (tx) => {
-        await tx.setTenantContext(tenantId);
-        const events = await tx.listAuditEvents(tenantId);
+        await tx.setTenantContext(normalizedTenantId);
+        const events = await tx.listAuditEvents(normalizedTenantId);
+        const invalidPayloadHashIndex = events.findIndex(
+          (event) => event.payloadHash !== computeAuditHash(null, event.payload),
+        );
+        if (invalidPayloadHashIndex >= 0) {
+          return { valid: false, checked: invalidPayloadHashIndex + 1, firstInvalidIndex: invalidPayloadHashIndex };
+        }
+
         return verifyAuditChain(events.map(({ previousHash, payload, eventHash }) => ({ previousHash, payload, eventHash })));
       });
     },

@@ -12,7 +12,7 @@ export type TenantDb<TTransaction extends TenantTransaction = TenantTransaction>
 
 export function assertTenantId(tenantId: string): string {
   if (!UUID_PATTERN.test(tenantId)) throw new Error("Invalid tenant ID");
-  return tenantId;
+  return tenantId.toLowerCase();
 }
 
 export function withTenant<T, TTransaction extends TenantTransaction>(

@@ -7,7 +7,6 @@ export type AuditEventInput = {
   entityType: string;
   entityId: string | null;
   payload: unknown;
-  retentionUntil?: Date;
 };
 
 export type PersistedAuditEventInput = Omit<AuditEventInput, "payload" | "retentionUntil"> & {
@@ -20,9 +19,10 @@ export type PersistedAuditEventInput = Omit<AuditEventInput, "payload" | "retent
 
 type AuditEventWithPreviousHash = AuditEventInput & { previousHash: AuditHash | null };
 
-export function createAuditEventInput(input: AuditEventWithPreviousHash): PersistedAuditEventInput {
+export function createAuditEventInput(input: AuditEventWithPreviousHash, now: () => Date = () => new Date()): PersistedAuditEventInput {
   const payload = canonicalize(input.payload);
-  const retentionUntil = input.retentionUntil ?? new Date(Date.UTC(new Date().getUTCFullYear() + 7, new Date().getUTCMonth(), new Date().getUTCDate()));
+  const retentionUntil = new Date(now());
+  retentionUntil.setUTCFullYear(retentionUntil.getUTCFullYear() + 7);
 
   return {
     tenantId: input.tenantId,

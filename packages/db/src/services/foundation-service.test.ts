@@ -72,11 +72,11 @@ function makeStore(options: { failAuditAt?: number } = {}): FoundationStore & { 
           working.participants.push(row);
           return row;
         },
-        async appendAuditEvent(input: AuditEventInput) {
+        async appendAuditEvent(input: AuditEventInput, now?: () => Date) {
           calls.push("audit");
           if (options.failAuditAt === working.auditEvents.length + 1) throw new Error("forced audit insert failure");
           const previousHash = working.auditEvents.filter((event) => event.tenantId === input.tenantId).at(-1)?.eventHash ?? null;
-          const event = createAuditEventInput({ ...input, previousHash });
+          const event = createAuditEventInput({ ...input, previousHash }, now);
           const row: AuditEventRecord = {
             id: `00000000-0000-4000-8000-0000000000${nextId++}`,
             ...event,
@@ -168,7 +168,48 @@ describe("foundation service", () => {
     });
   });
 
+  it("reports payloadHash-only corruption", async () => {
+    const store = makeStore();
+    const service = createFoundationService(store);
+    const bootstrap = await service.bootstrapTenant(bootstrapInput);
+    store.state.auditEvents[2] = { ...store.state.auditEvents[2], payloadHash: "0".repeat(64) };
+
+    await expect(service.verifyTenantAuditChain(bootstrap.tenant.id)).resolves.toEqual({
+      valid: false,
+      checked: 3,
+      firstInvalidIndex: 2,
+    });
+  });
+
+  it("normalizes an uppercase tenant UUID before context and append", async () => {
+    const store = makeStore();
+    const service = createFoundationService(store);
+
+    const result = await service.appendAuditEvent({
+      tenantId: "00000000-0000-4000-8000-00000000000A",
+      actorReference: "system",
+      action: "note",
+      entityType: "tenant",
+      entityId: null,
+      payload: { message: "normalized" },
+    });
+
+    expect(store.calls).toContain("context:00000000-0000-4000-8000-00000000000a");
+    expect(result.tenantId).toBe("00000000-0000-4000-8000-00000000000a");
+  });
+
+  it("uses an exact calendar seven-year retention period from the supplied clock", async () => {
+    const store = makeStore();
+    const now = new Date("2026-08-28T14:35:27.123Z");
+    const service = createFoundationService(store, { now: () => now });
+
+    const result = await service.bootstrapTenant(bootstrapInput);
+
+    expect(result.auditEvents[0]?.retentionUntil).toEqual(new Date("2033-08-28T14:35:27.123Z"));
+  });
+
   it("keeps the public append method free of caller-supplied chain links", () => {
     expectTypeOf<Parameters<FoundationService["appendAuditEvent"]>[0]>().not.toHaveProperty("previousHash");
+    expectTypeOf<Parameters<FoundationService["appendAuditEvent"]>[0]>().not.toHaveProperty("retentionUntil");
   });
 });

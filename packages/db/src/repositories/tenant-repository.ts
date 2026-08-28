@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import type { AppDb } from "../client";
 import { auditEvents, participants, sites, tenants, workers, type PreferredCommunicationFormat, type TenantStatus } from "../schema";
-import { withTenant } from "../tenant-context";
+import { assertTenantId, withTenant } from "../tenant-context";
 import type { NewTenantInput } from "@attesta/domain";
 import { createAuditEventInput, type AuditEventInput } from "./audit-repository";
 import type {
@@ -92,13 +92,16 @@ export function createTenantRepository(db: AppDb): TenantRepository {
   };
 }
 
-export function createDrizzleFoundationStore(db: AppDb): FoundationStore {
+export function createDrizzleFoundationStore(db: AppDb, options: { now?: () => Date } = {}): FoundationStore {
+  const now = options.now ?? (() => new Date());
+
   return {
     transaction<T>(operation: (tx: FoundationTransaction) => Promise<T>): Promise<T> {
       return db.transaction(async (tx) => {
         const adapter: FoundationTransaction = {
           async setTenantContext(tenantId) {
-            await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+            const normalizedTenantId = assertTenantId(tenantId);
+            await tx.execute(sql`select set_config('app.tenant_id', ${normalizedTenantId}, true)`);
           },
           async createTenant(id, name): Promise<TenantRecord> {
             const [row] = await tx.insert(tenants).values({ id, name }).returning({ id: tenants.id, name: tenants.name });
@@ -116,24 +119,26 @@ export function createDrizzleFoundationStore(db: AppDb): FoundationStore {
             const [row] = await tx.insert(participants).values({ tenantId, siteId, name, preferredFormat }).returning({ id: participants.id, tenantId: participants.tenantId, siteId: participants.siteId, name: participants.name, preferredFormat: participants.preferredFormat });
             return requiredRow(row);
           },
-          async appendAuditEvent(input: AuditEventInput): Promise<AuditEventRecord> {
+          async appendAuditEvent(input: AuditEventInput, eventNow = now): Promise<AuditEventRecord> {
+            const normalizedTenantId = assertTenantId(input.tenantId);
             // PostgreSQL transaction-level advisory locks serialize a tenant's chain even when its first event does not exist yet.
-            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"attesta:audit-chain:" + input.tenantId}, 0))`);
+            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"attesta:audit-chain:" + normalizedTenantId}, 0))`);
             const [head] = await tx
               .select({ eventHash: auditEvents.eventHash })
               .from(auditEvents)
-              .where(eq(auditEvents.tenantId, input.tenantId))
+              .where(eq(auditEvents.tenantId, normalizedTenantId))
               .orderBy(desc(auditEvents.createdOrder))
               .limit(1);
-            const event = createAuditEventInput({ ...input, previousHash: head?.eventHash ?? null });
+            const event = createAuditEventInput({ ...input, tenantId: normalizedTenantId, previousHash: head?.eventHash ?? null }, eventNow);
             const [row] = await tx.insert(auditEvents).values(event).returning();
             return requiredRow(row);
           },
           async listAuditEvents(tenantId): Promise<AuditEventRecord[]> {
+            const normalizedTenantId = assertTenantId(tenantId);
             return tx
               .select()
               .from(auditEvents)
-              .where(eq(auditEvents.tenantId, tenantId))
+              .where(eq(auditEvents.tenantId, normalizedTenantId))
               .orderBy(asc(auditEvents.createdOrder));
           },
         };
