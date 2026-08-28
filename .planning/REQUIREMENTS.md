@@ -120,7 +120,7 @@ These items came from `NDIS Attesta PRD GTM Review.md`. They are roadmap candida
 | GTM-01–04 | Phase 09 | Pending |
 | v2 set plus SAFE-01, AI-03, BRIF-06, VOIC-08, AUD-02 | Phase 06, 07, or 10 | Backlog |
 
-**Coverage:** v1 requirements: 38 total | Mapped to phases: 38 | Unmapped: 0
+**Coverage:** v1 requirements: 41 total | Mapped to phases: 41 | Unmapped: 0
 
 ## Planning gate
 
