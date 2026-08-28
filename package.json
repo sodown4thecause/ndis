@@ -14,7 +14,7 @@
     "test": "pnpm vitest run",
     "test:e2e": "playwright test",
     "db:check": "pnpm --filter @attesta/db db:check",
-    "test:db": "pnpm --filter @attesta/db test:db"
+    "test:db": "vitest run --config vitest.integration.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
