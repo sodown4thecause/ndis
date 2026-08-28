@@ -5,6 +5,6 @@ export default defineConfig({
   out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgresql://placeholder.invalid/attesta",
+    url: process.env.DATABASE_MIGRATION_URL ?? "postgresql://placeholder.invalid/attesta-migrations",
   },
 });

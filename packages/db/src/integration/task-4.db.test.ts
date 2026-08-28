@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyAuditChain, type AuditEvent } from "@attesta/domain";
 import { createDrizzleFoundationStore } from "../repositories/tenant-repository";
@@ -9,8 +9,9 @@ import { createFoundationService } from "../services/foundation-service";
 import { auditEvents } from "../schema";
 import type { AppDb } from "../client";
 
-const migrationPath = fileURLToPath(new URL("../../migrations/0000_foundation.sql", import.meta.url));
+const migrationsFolder = fileURLToPath(new URL("../../migrations", import.meta.url));
 const appRole = "attesta_app";
+const runtimeRole = "attesta_runtime";
 
 const bootstrapInput = (suffix: string) => ({
   name: `Synthetic provider ${suffix}`,
@@ -25,15 +26,18 @@ async function createDatabase() {
   const pg = new PGlite();
   databases.push(pg);
   await pg.waitReady;
-  await pg.exec(await readFile(migrationPath, "utf8"));
+  const pgliteDb = drizzlePglite(pg, { schema: { auditEvents } });
+  await migrate(pgliteDb, { migrationsFolder });
   await pg.exec(`
-    CREATE ROLE ${appRole} LOGIN;
+    CREATE ROLE ${appRole} NOLOGIN NOBYPASSRLS;
+    CREATE ROLE ${runtimeRole} LOGIN NOBYPASSRLS;
+    GRANT ${appRole} TO ${runtimeRole};
     GRANT USAGE ON SCHEMA public TO ${appRole};
     GRANT SELECT, INSERT ON tenants, sites, workers, participants, audit_events TO ${appRole};
-    GRANT UPDATE, DELETE ON audit_events TO ${appRole};
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${appRole};
   `);
-  await pg.query(`SET ROLE ${appRole}`);
-  const db = drizzlePglite(pg, { schema: { auditEvents } }) as unknown as AppDb;
+  await pg.query(`SET ROLE ${runtimeRole}`);
+  const db = pgliteDb as unknown as AppDb;
   return { pg, service: createFoundationService(createDrizzleFoundationStore(db)) };
 }
 
@@ -85,15 +89,26 @@ afterEach(async () => {
 });
 
 describe("Task 4 live PostgreSQL persistence", () => {
-  it("uses a non-bypass application role for database assertions", async () => {
+  it("uses a non-bypass runtime login granted the least-privilege application role", async () => {
     const { pg } = await createDatabase();
-    const role = await rows<{ currentUser: string; bypassRls: boolean }>(
+    const role = await rows<{ currentUser: string; login: boolean; bypassRls: boolean }>(
       pg,
-      `SELECT current_user AS "currentUser", rolbypassrls AS "bypassRls" FROM pg_roles WHERE rolname = $1`,
-      [appRole],
+      `SELECT current_user AS "currentUser", rolcanlogin AS login, rolbypassrls AS "bypassRls"
+       FROM pg_roles
+       WHERE rolname = $1`,
+      [runtimeRole],
     );
 
-    expect(role).toEqual([{ currentUser: appRole, bypassRls: false }]);
+    expect(role).toEqual([{ currentUser: runtimeRole, login: true, bypassRls: false }]);
+    await expect(rows<{ member: string; parent: string }>(
+      pg,
+      `SELECT member.rolname AS member, parent.rolname AS parent
+       FROM pg_auth_members
+       JOIN pg_roles member ON member.oid = pg_auth_members.member
+       JOIN pg_roles parent ON parent.oid = pg_auth_members.roleid
+       WHERE member.rolname = $1 AND parent.rolname = $2`,
+      [runtimeRole, appRole],
+    )).resolves.toEqual([{ member: runtimeRole, parent: appRole }]);
   });
 
   it("executes the tenant-chain advisory lock inside a transaction", async () => {
@@ -205,6 +220,8 @@ describe("Task 4 live PostgreSQL persistence", () => {
     const result = await service.bootstrapTenant(bootstrapInput("append-only"));
     const [event] = await withTenantContext(pg, result.tenant.id, () => rows<{ id: string }>(pg, "SELECT id FROM audit_events ORDER BY created_order ASC LIMIT 1"));
 
+    // The runtime role has no UPDATE/DELETE grants; reset to the PGlite owner to exercise the trigger itself.
+    await pg.query("RESET ROLE");
     await expect(withTenantContext(pg, result.tenant.id, () => pg.query("UPDATE audit_events SET action = 'tampered' WHERE id = $1", [event?.id]))).rejects.toThrow(/append-only/);
     await expect(withTenantContext(pg, result.tenant.id, () => pg.query("DELETE FROM audit_events WHERE id = $1", [event?.id]))).rejects.toThrow(/append-only/);
   });

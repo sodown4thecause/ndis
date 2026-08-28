@@ -5,6 +5,7 @@ CREATE TABLE tenants (
   name text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+--> statement-breakpoint
 
 CREATE TABLE sites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -15,6 +16,7 @@ CREATE TABLE sites (
   CONSTRAINT sites_tenant_id_id_unique UNIQUE (tenant_id, id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+--> statement-breakpoint
 
 CREATE TABLE workers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,6 +28,7 @@ CREATE TABLE workers (
   CONSTRAINT workers_tenant_site_fk FOREIGN KEY (tenant_id, site_id) REFERENCES sites(tenant_id, id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+--> statement-breakpoint
 
 CREATE TABLE participants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -39,6 +42,7 @@ CREATE TABLE participants (
   CONSTRAINT participants_tenant_site_fk FOREIGN KEY (tenant_id, site_id) REFERENCES sites(tenant_id, id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+--> statement-breakpoint
 
 CREATE TABLE audit_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,39 +59,60 @@ CREATE TABLE audit_events (
   created_at timestamptz NOT NULL DEFAULT now(),
   retention_until timestamptz NOT NULL
 );
+--> statement-breakpoint
 
 CREATE INDEX sites_tenant_id_idx ON sites(tenant_id);
+--> statement-breakpoint
 CREATE INDEX workers_tenant_id_idx ON workers(tenant_id);
+--> statement-breakpoint
 CREATE INDEX participants_tenant_id_idx ON participants(tenant_id);
+--> statement-breakpoint
 CREATE INDEX audit_events_tenant_id_created_at_idx ON audit_events(tenant_id, created_at);
+--> statement-breakpoint
 CREATE INDEX audit_events_tenant_id_created_order_idx ON audit_events(tenant_id, created_order);
+--> statement-breakpoint
 
 ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE sites FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE workers ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE workers FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE participants FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE audit_events FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 
 CREATE POLICY sites_tenant_isolation ON sites
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+--> statement-breakpoint
 CREATE POLICY tenants_tenant_isolation ON tenants
   USING (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+--> statement-breakpoint
 CREATE POLICY workers_tenant_isolation ON workers
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+--> statement-breakpoint
 CREATE POLICY participants_tenant_isolation ON participants
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+--> statement-breakpoint
 CREATE POLICY audit_events_tenant_isolation ON audit_events
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION prevent_audit_event_mutation()
 RETURNS trigger
@@ -97,8 +122,10 @@ BEGIN
   RAISE EXCEPTION 'audit_events is append-only';
 END;
 $$;
+--> statement-breakpoint
 
 REVOKE UPDATE, DELETE ON audit_events FROM PUBLIC;
+--> statement-breakpoint
 CREATE TRIGGER audit_events_append_only
   BEFORE UPDATE OR DELETE ON audit_events
   FOR EACH ROW

@@ -22,7 +22,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:check": "drizzle-kit check --config drizzle.config.ts",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
-    "test:db": "vitest run src/integration/task-4.db.test.ts"
+    "test:db": "vitest run --testTimeout=30000 src/integration/migrator.db.test.ts src/integration/task-4.db.test.ts"
   }
 }
