@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import type { AppDb } from "../client";
-import { auditEvents, participants, sites, tenants, workers } from "../schema";
+import { auditEvents, participants, sites, tenants, workers, type PreferredCommunicationFormat, type TenantStatus } from "../schema";
 import { withTenant } from "../tenant-context";
+import type { NewTenantInput } from "@attesta/domain";
 import type { AuditEventInput } from "./audit-repository";
 import type {
   AuditEventRecord,
@@ -9,9 +10,11 @@ import type {
   FoundationTransaction,
   ParticipantRecord,
   SiteRecord,
+  TenantBootstrapResult,
   TenantRecord,
   WorkerRecord,
 } from "../services/foundation-service";
+import { createFoundationService } from "../services/foundation-service";
 
 function requiredRow<T>(row: T | undefined): T {
   if (!row) throw new Error("Database insert returned no row");
@@ -19,6 +22,7 @@ function requiredRow<T>(row: T | undefined): T {
 }
 
 export type TenantRepository = {
+  createTenantBootstrap(input: NewTenantInput, actorReference?: string): Promise<TenantBootstrapResult>;
   getTenant(tenantId: string): Promise<TenantRecord | null>;
   listTenantPeople(tenantId: string): Promise<TenantPerson[]>;
 };
@@ -28,13 +32,24 @@ export type TenantPerson = {
   tenantId: string;
   siteId: string;
   name: string;
-  status: string;
+  status: TenantStatus;
   kind: "worker" | "participant";
-  preferredFormat: string | null;
+  preferredFormat: PreferredCommunicationFormat | null;
 };
+
+export function createTenantBootstrap(
+  db: AppDb,
+  input: NewTenantInput,
+  actorReference = "system",
+): Promise<TenantBootstrapResult> {
+  return createFoundationService(createDrizzleFoundationStore(db)).bootstrapTenant(input, actorReference);
+}
 
 export function createTenantRepository(db: AppDb): TenantRepository {
   return {
+    createTenantBootstrap(input, actorReference) {
+      return createTenantBootstrap(db, input, actorReference);
+    },
     async getTenant(tenantId) {
       return withTenant(db, tenantId, async (tx) => {
         const rows = await tx
@@ -69,8 +84,8 @@ export function createTenantRepository(db: AppDb): TenantRepository {
           .where(eq(participants.tenantId, tenantId));
 
         return [
-          ...workerRows.map((row) => ({ ...row, kind: "worker" as const, preferredFormat: null })),
-          ...participantRows.map((row) => ({ ...row, kind: "participant" as const })),
+          ...workerRows.map((row) => ({ ...row, status: row.status as TenantStatus, kind: "worker" as const, preferredFormat: null })),
+          ...participantRows.map((row) => ({ ...row, status: row.status as TenantStatus, kind: "participant" as const, preferredFormat: row.preferredFormat as PreferredCommunicationFormat })),
         ];
       });
     },
