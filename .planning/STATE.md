@@ -11,7 +11,7 @@
 - [x] Planning workflow reset to Superpowers
 - [x] Phase sequence and v1 requirements retained
 - [x] Review-derived backlog triaged without expanding Phase 01 scope
-- [x] Phase 01 locally verified from Task 6A final clean-checkout evidence at commit `f4ac66d` under Node 22.14.0
+- [x] Phase 01 runtime foundation locally verified from Task 6A evidence plus Final C complete-envelope, explicit-order, migrator, and integration-contract tests
 
 ## In Progress
 
@@ -20,6 +20,8 @@
 ## Phase 01 Evidence Boundary
 
 Task 6A final clean-checkout evidence at `f4ac66d` passed frozen install, lint, typecheck, 56 unit tests, 7 live PGlite database tests, Playwright, Next build, and diff checks under Node 22.14.0. This records local completion only; it does not claim production deployment, native Neon multi-session contention, vendor DPA/data-region/retention terms, or production credentials.
+
+Final C reconciles the requirement boundary without marking the Phase 01 runtime foundation incomplete: foundation-create events now hash and persist the complete immutable envelope, while PLAT-02 remains pending for update/approval/export coverage. PGlite RLS is verified, while PLAT-03 production TLS 1.3, AES-256, preview, and log guarantees remain launch gates under LG-001/LG-002/LG-003.
 
 ## Launch Gates
 

@@ -29,12 +29,12 @@ Phases 02–10 are roadmap outlines only. Each requires Superpowers brainstormin
 **Requirements:** PLAT-01, PLAT-02, PLAT-03
 **Success Criteria:**
   1. [x] Synthetic tenant bootstrap creates at least one site, worker, and participant record in local verification.
-  2. [x] Unit and live PGlite tests verify hash-chained audit events and rollback behavior for the reviewed foundation slice.
-  3. [x] Vercel/Sydney and Neon/Australia targets, encryption boundaries, and backup obligations are documented; no real preview or production deployment is claimed.
+  2. [x] Unit and live PGlite tests verify the complete immutable audit envelope, linked hashes, explicit persisted order, and rollback behavior for the foundation-create slice; broader PLAT-02 mutation coverage remains pending.
+  3. [x] Vercel/Sydney and Neon/Australia targets, encryption boundaries, and backup obligations are documented; local RLS is verified, while PLAT-03 production TLS/AES/preview/log guarantees remain launch gates.
 
 **Local evidence:** Task 6A final clean-checkout evidence at commit `f4ac66d` passed under Node 22.14.0 for frozen install, lint, typecheck, 56 unit tests, 7 live PGlite database tests, Playwright, Next build, and diff checks.
 
-**Status:** Locally complete. Native Neon multi-session contention, real Vercel preview/production deployment, vendor terms/DPA/data-region/retention verification, and production credentials remain launch gates.
+**Status:** Phase 01 runtime foundation is locally complete. PLAT-02 remains pending for update/approval/export coverage beyond foundation-create events. PLAT-03 remains pending for production TLS/AES and preview/log guarantees. Native Neon multi-session contention, real Vercel preview/production deployment, vendor terms/DPA/data-region/retention verification, and production credentials remain launch gates.
 
 **Design:** `docs/superpowers/specs/2026-08-28-attesta-vercel-stack-design.md` (approved for Phase 01 local implementation)
 

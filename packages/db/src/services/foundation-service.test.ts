@@ -76,12 +76,14 @@ function makeStore(options: { failAuditAt?: number } = {}): FoundationStore & { 
           calls.push("audit");
           if (options.failAuditAt === working.auditEvents.length + 1) throw new Error("forced audit insert failure");
           const previousHash = working.auditEvents.filter((event) => event.tenantId === input.tenantId).at(-1)?.eventHash ?? null;
-          const event = createAuditEventInput({ ...input, previousHash }, now);
-          const row: AuditEventRecord = {
+          const createdAt = new Date((now ?? (() => new Date()))().getTime());
+          const event = createAuditEventInput({ ...input, previousHash }, {
             id: `00000000-0000-4000-8000-0000000000${nextId++}`,
-            ...event,
-            createdAt: new Date(Date.UTC(2026, 7, 28, 0, 0, working.auditEvents.length)),
+            createdAt,
             createdOrder: working.auditEvents.length + 1,
+          });
+          const row: AuditEventRecord = {
+            ...event,
           };
           working.auditEvents.push(row);
           return row;
@@ -111,7 +113,11 @@ describe("foundation service", () => {
     expect(store.state.workers).toHaveLength(1);
     expect(store.state.participants).toHaveLength(1);
     expect(result.auditEvents).toHaveLength(4);
-    expect(verifyAuditChain(store.state.auditEvents)).toEqual({ valid: true, checked: 4, firstInvalidIndex: null });
+    expect(verifyAuditChain(store.state.auditEvents.map((event) => ({
+      ...event,
+      createdAt: event.createdAt.toISOString(),
+      retentionUntil: event.retentionUntil.toISOString(),
+    })))).toEqual({ valid: true, checked: 4, firstInvalidIndex: null });
   });
 
   it("rolls back domain and audit rows when an audit insert fails", async () => {

@@ -64,7 +64,7 @@ export const participants = pgTable("participants", {
 
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").defaultRandom().primaryKey(),
-  createdOrder: bigint("created_order", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
+  createdOrder: bigint("created_order", { mode: "number" }).generatedByDefaultAsIdentity().notNull(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   actorReference: text("actor_reference").notNull(),
   action: varchar("action", { length: 64 }).notNull(),

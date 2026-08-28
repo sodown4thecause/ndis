@@ -6,13 +6,13 @@
 
 ## v1 Requirements (MVP ≤ 90 days)
 
-Phase 01 checkboxes below record local foundation verification only. They do not assert production deployment, native Neon contention, vendor terms, or production credentials.
+Phase 01 checkboxes below record local foundation verification only. PLAT-02 and PLAT-03 remain pending where their wording exceeds the implemented local foundation; they do not assert production deployment, native Neon contention, vendor terms, or production credentials.
 
 ### Platform & Security
 
 - [x] **PLAT-01**: Multi-tenant data model with tenant → site → worker/participant hierarchy per PRD §8 ER diagram
-- [x] **PLAT-02**: Append-only audit log with hash chaining on every create/update/approval/export
-- [x] **PLAT-03**: TLS 1.3 in transit; AES-256 at rest; per-tenant PostgreSQL row-level security; no sensitive data in previews or logs
+- [ ] **PLAT-02**: Append-only audit log with complete-envelope hash chaining on every create/update/approval/export (foundation-create audit coverage is locally implemented; update/approval/export coverage remains pending)
+- [ ] **PLAT-03**: TLS 1.3 in transit; AES-256 at rest; per-tenant PostgreSQL row-level security; no sensitive data in previews or logs (local PGlite RLS is verified; production TLS/AES/preview/log guarantees remain launch gates)
 - [ ] **PLAT-04**: MFA enforced for all provider admin/quality-lead accounts
 - [ ] **PLAT-05**: RBAC roles: Quality Lead, Supervisor, Worker, Participant/Nominee (read-only auditor deferred to Phase 2)
 - [ ] **PLAT-06**: SSO through WorkOS AuthKit with Microsoft Entra ID and Google Workspace connections
@@ -109,7 +109,9 @@ These items came from `NDIS Attesta PRD GTM Review.md`. They are roadmap candida
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLAT-01–03 | Phase 01 | Locally complete; production gates open |
+| PLAT-01 | Phase 01 | Locally complete |
+| PLAT-02 | Phase 01 | Pending: foundation-create audit coverage is partial; mutation coverage for update/approval/export remains |
+| PLAT-03 | Phase 01 | Pending: local RLS is verified; production TLS/AES/preview/log guarantees remain launch gates |
 | PLAT-04–08 | Phase 02 | Pending |
 | RULE-01–05 | Phase 03 | Pending |
 | BRIF-01–05 | Phase 04 | Pending |

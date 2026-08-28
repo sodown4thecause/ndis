@@ -73,5 +73,13 @@ describe("Drizzle foundation migration", () => {
        ORDER BY event_manipulation`,
     );
     expect(triggerEvents).toEqual([{ event: "DELETE" }, { event: "UPDATE" }]);
+
+    const identity = await rows<{ generation: string | null }>(
+      pg,
+      `SELECT identity_generation AS generation
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'audit_events' AND column_name = 'created_order'`,
+    );
+    expect(identity).toEqual([{ generation: "BY DEFAULT" }]);
   });
 });

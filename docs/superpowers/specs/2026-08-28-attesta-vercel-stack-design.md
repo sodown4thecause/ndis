@@ -16,7 +16,7 @@ The architecture is deliberately single-application and modular. It keeps tenant
 
 1. Establish a runnable local application and a Vercel deployment path.
 2. Create the tenant → site → worker/participant data model required by PLAT-01.
-3. Make every application mutation emit an append-only, hash-chained audit event in the same database transaction.
+3. Make every implemented application mutation emit an append-only audit event in the same database transaction, with a complete immutable envelope hash; broader mutation coverage remains a later requirement gate.
 4. Enforce tenant isolation with PostgreSQL row-level security and application-side tenant context.
 5. Keep the path open for WorkOS, Resend, AI Gateway, evidence storage, and later compliance modules without leaking sensitive records to those services.
 
@@ -80,7 +80,7 @@ Required Phase 01 fields:
 - `site`: UUID, tenant UUID, name, status, created timestamp.
 - `worker`: UUID, tenant UUID, site UUID, display name, status, created timestamp.
 - `participant`: UUID, tenant UUID, site UUID, display name, preferred communication format, status, created timestamp.
-- `audit_event`: UUID, tenant UUID, actor reference, action, entity type/id, payload hash, previous event hash, event hash, created timestamp, retention timestamp.
+- `audit_event`: UUID, tenant UUID, actor reference, action, entity type/id, canonical payload and payload hash, previous event hash, event hash, created timestamp/order, retention timestamp. The service generates the UUID, created timestamp, retention timestamp, and explicit sequence order before hashing and persists those values unchanged.
 
 Worker and participant display names are test-safe in fixtures. Sensitive profile expansion belongs to later phases and must not weaken the audit or RLS invariants.
 
@@ -91,9 +91,10 @@ All mutations use one database transaction:
 1. Lock or otherwise safely read the tenant chain head.
 2. Apply the domain mutation.
 3. Canonicalize the audit payload with stable key ordering.
-4. Compute `event_hash = SHA-256(previous_hash + canonical_payload)`.
-5. Insert the audit event with `previous_hash` and `event_hash`.
-6. Commit only if both domain and audit writes succeed.
+4. Generate immutable event values before hashing: event ID, created timestamp, retention timestamp, and an explicit `created_order` obtained from the controlled identity sequence after the tenant lock.
+5. Compute `payload_hash = SHA-256(canonical_payload)` and `event_hash = SHA-256(previous_hash + canonical_immutable_envelope)`, where the envelope binds previous hash, event ID, tenant, actor, action, entity, payload/payload hash, retention timestamp, creation timestamp, and creation order.
+6. Insert the audit event with the precomputed immutable values, then verify the returned persisted order and envelope recompute to the same event hash.
+7. Commit only if both domain and audit writes succeed.
 
 Audit events are append-only at the database role level. The application exposes no update or delete operation for them. A chain verifier recomputes every event and reports the first broken link.
 
@@ -114,11 +115,16 @@ The target data boundary is:
 
 Vendor regional handling, retention, backup, DPA, and failover terms remain production launch gates. This plan does not claim that the chosen vendors are automatically compliant merely because the application is configured for Sydney.
 
+## Phase 01 integration contracts
+
+Phase 01 exposes a notification interface with an email-shaped request and a no-op implementation for local/tests; it does not send SMS. It also exposes immutable AI audit metadata containing only model, provider, version, prompt hash, output hash, and human approver. The WorkOS boundary is limited to a provider-tagged subject reference; authentication and authorization remain deferred to Phase 02.
+
 ## Testing Strategy
 
 - Unit tests verify canonical serialization, hash-chain construction, and validation errors.
 - Database integration tests verify tenant creation, cascade relationships, RLS isolation, append-only audit behavior, and rollback when the audit write fails.
 - Route tests verify the happy path and malformed/missing tenant context.
+- Focused tests verify complete audit-envelope tampering detection, explicit persisted order, and notification/AI/identity boundary contracts.
 - Playwright acceptance coverage verifies the local health page and the tenant bootstrap flow using synthetic data only.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` are required before Phase 01 completion.
 

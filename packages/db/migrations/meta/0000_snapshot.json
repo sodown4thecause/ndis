@@ -21,7 +21,7 @@
           "primaryKey": false,
           "notNull": true,
           "identity": {
-            "type": "always",
+            "type": "byDefault",
             "name": "audit_events_created_order_seq",
             "schema": "public",
             "increment": "1",

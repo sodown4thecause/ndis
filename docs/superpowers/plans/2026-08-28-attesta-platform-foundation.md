@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-28-attesta-vercel-stack-design.md`
 
-**Phase 01 status (2026-08-28):** Tasks 1–5 and Task 6A are complete for local verification. Task 6A's final clean-checkout evidence at commit `f4ac66d` passed under Node 22.14.0 for frozen install, lint, typecheck, 56 unit tests, 7 live PGlite database tests, Playwright, Next build, and diff checks. This is not a production deployment claim: native Neon multi-session contention, real Vercel preview/production deployment, vendor DPA/data-region/retention terms, and production credentials remain launch gates. Phases 02–10 are roadmap outlines only and require Superpowers brainstorming/design approval plus an approved detailed design and implementation plan before code work; Phase 10 remains post-MVP planning.
+**Phase 01 status (2026-08-28):** Tasks 1–5 and Task 6A are complete for local verification, and Final C completes the foundation-create audit envelope plus Phase 01 integration contracts. PLAT-02 remains pending for update/approval/export coverage; PLAT-03 remains pending for production TLS/AES/preview/log guarantees. Task 6A's final clean-checkout evidence at commit `f4ac66d` passed under Node 22.14.0 for frozen install, lint, typecheck, 56 unit tests, 7 live PGlite database tests, Playwright, Next build, and diff checks. This is not a production deployment claim: native Neon multi-session contention, real Vercel preview/production deployment, vendor DPA/data-region/retention terms, and production credentials remain launch gates. Phases 02–10 are roadmap outlines only and require Superpowers brainstorming/design approval plus an approved detailed design and implementation plan before code work; Phase 10 remains post-MVP planning.
 
 ## Review Disposition
 
@@ -20,7 +20,7 @@ The 2026-08-28 PRD/GTM review is advisory input. Phase 01 remains limited to pla
 
 - The target infrastructure is Vercel, Neon, WorkOS, Resend, and Vercel AI Gateway as defined in the design spec.
 - No secrets, PII, audio, or evidence files in source control, previews, logs, prompts, or test fixtures.
-- Every tenant-owned mutation writes its audit event in the same transaction as the domain mutation.
+- Every implemented tenant-owned mutation writes its audit event in the same transaction as the domain mutation; complete-envelope hashing is locally verified for foundation-create events, while broader PLAT-02 mutation coverage remains pending.
 - Audit events are append-only and verify through SHA-256 chain links.
 - Tenant-owned tables require PostgreSQL RLS and a transaction-local tenant context.
 - WorkOS is identity only; application RBAC and tenant membership are enforced from Neon records.
@@ -163,7 +163,7 @@ Expected: FAIL because the service and repository are not implemented.
 
 - [ ] **Step 3: Implement the transaction service**
 
-Create a transaction helper that sets tenant context, performs domain writes, obtains the current chain head with the required lock strategy, canonicalizes each event payload, computes the hash, inserts the audit row, and commits only after all writes succeed. Do not expose update/delete methods for audit rows.
+Create a transaction helper that sets tenant context, performs domain writes, obtains the current chain head with the required lock strategy, generates immutable event values, canonicalizes the payload and complete envelope, computes both hashes, inserts the audit row with explicit order/timestamps, verifies the persisted row matches the hashed envelope, and commits only after all writes succeed. Do not expose update/delete methods for audit rows.
 
 - [ ] **Step 4: Run the focused integration tests against disposable PostgreSQL**
 

@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import type { AppDb } from "../client";
 import { auditEvents, participants, sites, tenants, workers, type PreferredCommunicationFormat, type TenantStatus } from "../schema";
 import { assertTenantId, withTenant } from "../tenant-context";
-import type { NewTenantInput } from "@attesta/domain";
+import { computeAuditEventHash, type AuditEnvelope, type NewTenantInput } from "@attesta/domain";
 import { createAuditEventInput, type AuditEventInput } from "./audit-repository";
 import type {
   AuditEventRecord,
@@ -129,9 +130,42 @@ export function createDrizzleFoundationStore(db: AppDb, options: { now?: () => D
               .where(eq(auditEvents.tenantId, normalizedTenantId))
               .orderBy(desc(auditEvents.createdOrder))
               .limit(1);
-            const event = createAuditEventInput({ ...input, tenantId: normalizedTenantId, previousHash: head?.eventHash ?? null }, eventNow);
+            const orderResult = await tx.execute(sql`select nextval('audit_events_created_order_seq') as created_order`);
+            const createdOrder = Number((orderResult as { rows?: Array<{ created_order?: number | string }> }).rows?.[0]?.created_order);
+            if (!Number.isSafeInteger(createdOrder) || createdOrder < 1) {
+              throw new Error("Database did not return a valid audit order");
+            }
+            const createdAt = new Date(eventNow().getTime());
+            const event = createAuditEventInput(
+              { ...input, tenantId: normalizedTenantId, previousHash: head?.eventHash ?? null },
+              { id: randomUUID(), createdAt, createdOrder },
+            );
             const [row] = await tx.insert(auditEvents).values(event).returning();
-            return requiredRow(row);
+            const persisted = requiredRow(row);
+            const persistedEnvelope: AuditEnvelope = {
+              id: persisted.id,
+              previousHash: persisted.previousHash,
+              tenantId: persisted.tenantId,
+              actorReference: persisted.actorReference,
+              action: persisted.action,
+              entityType: persisted.entityType,
+              entityId: persisted.entityId,
+              payload: persisted.payload,
+              payloadHash: persisted.payloadHash,
+              retentionUntil: persisted.retentionUntil.toISOString(),
+              createdAt: persisted.createdAt.toISOString(),
+              createdOrder: persisted.createdOrder,
+            };
+            if (
+              persisted.id !== event.id
+              || persisted.createdOrder !== event.createdOrder
+              || persisted.createdAt.getTime() !== event.createdAt.getTime()
+              || persisted.retentionUntil.getTime() !== event.retentionUntil.getTime()
+              || persisted.eventHash !== computeAuditEventHash(persistedEnvelope)
+            ) {
+              throw new Error("Persisted audit event does not match its hashed envelope");
+            }
+            return persisted;
           },
           async listAuditEvents(tenantId): Promise<AuditEventRecord[]> {
             const normalizedTenantId = assertTenantId(tenantId);

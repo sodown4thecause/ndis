@@ -141,11 +141,30 @@ describe("Task 4 live PostgreSQL persistence", () => {
     }));
     const events = await withTenantContext(pg, result.tenant.id, () => rows<AuditEvent>(
       pg,
-      "SELECT previous_hash AS \"previousHash\", payload, event_hash AS \"eventHash\" FROM audit_events ORDER BY created_order ASC",
+      `SELECT id,
+              previous_hash AS "previousHash",
+              tenant_id AS "tenantId",
+              actor_reference AS "actorReference",
+              action,
+              entity_type AS "entityType",
+              entity_id AS "entityId",
+              payload,
+              payload_hash AS "payloadHash",
+              retention_until::text AS "retentionUntil",
+              created_at::text AS "createdAt",
+              created_order::int AS "createdOrder",
+              event_hash AS "eventHash"
+       FROM audit_events ORDER BY created_order ASC`,
     ));
+    const canonicalEvents = events.map((event) => ({
+      ...event,
+      retentionUntil: new Date(event.retentionUntil).toISOString(),
+      createdAt: new Date(event.createdAt).toISOString(),
+    }));
 
     expect(counts).toEqual({ tenants: 1, sites: 1, workers: 1, participants: 1, auditEvents: 4 });
-    expect(verifyAuditChain(events)).toEqual({ valid: true, checked: 4, firstInvalidIndex: null });
+    expect(verifyAuditChain(canonicalEvents)).toEqual({ valid: true, checked: 4, firstInvalidIndex: null });
+    expect(events.map((event) => event.createdOrder)).toEqual(result.auditEvents.map((event) => event.createdOrder));
     await expect(service.verifyTenantAuditChain(result.tenant.id)).resolves.toEqual({ valid: true, checked: 4, firstInvalidIndex: null });
   });
 

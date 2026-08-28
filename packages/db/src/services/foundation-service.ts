@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   createTenantBootstrap,
-  computeAuditHash,
   verifyAuditChain,
   type AuditVerification,
   type NewTenantInput,
@@ -19,7 +18,7 @@ export type ParticipantRecord = {
   name: string;
   preferredFormat: string;
 };
-export type AuditEventRecord = PersistedAuditEventInput & { id: string; createdAt: Date; createdOrder: number };
+export type AuditEventRecord = PersistedAuditEventInput;
 export type AuditEventClock = () => Date;
 
 export type FoundationTransaction = {
@@ -111,14 +110,21 @@ export function createFoundationService(store: FoundationStore, options: Foundat
       return store.transaction(async (tx) => {
         await tx.setTenantContext(normalizedTenantId);
         const events = await tx.listAuditEvents(normalizedTenantId);
-        const invalidPayloadHashIndex = events.findIndex(
-          (event) => event.payloadHash !== computeAuditHash(null, event.payload),
-        );
-        if (invalidPayloadHashIndex >= 0) {
-          return { valid: false, checked: invalidPayloadHashIndex + 1, firstInvalidIndex: invalidPayloadHashIndex };
-        }
-
-        return verifyAuditChain(events.map(({ previousHash, payload, eventHash }) => ({ previousHash, payload, eventHash })));
+        return verifyAuditChain(events.map((event) => ({
+          id: event.id,
+          previousHash: event.previousHash,
+          tenantId: event.tenantId,
+          actorReference: event.actorReference,
+          action: event.action,
+          entityType: event.entityType,
+          entityId: event.entityId,
+          payload: event.payload,
+          payloadHash: event.payloadHash,
+          retentionUntil: event.retentionUntil.toISOString(),
+          createdAt: event.createdAt.toISOString(),
+          createdOrder: event.createdOrder,
+          eventHash: event.eventHash,
+        })));
       });
     },
   };

@@ -42,7 +42,7 @@ Prove that frontline workers practised updated standards and that participants u
 
 ## Planning Status
 
-The planning baseline is aligned to Vercel, Neon, WorkOS, Resend, Vercel AI Gateway, and named open-source components. Phase 01 is locally complete against synthetic/local verification: Task 6A's final clean-checkout evidence at commit `f4ac66d` passed under Node 22.14.0 for frozen install, lint, typecheck, 56 unit tests, 7 live PGlite database tests, Playwright, Next build, and diff checks.
+The planning baseline is aligned to Vercel, Neon, WorkOS, Resend, Vercel AI Gateway, and named open-source components. The Phase 01 runtime foundation is locally complete against synthetic/local verification, including Final C's complete-envelope audit and integration-boundary tests. PLAT-02 remains pending for update/approval/export coverage, and PLAT-03 remains pending for production TLS/AES/preview/log guarantees.
 
 This local completion does not claim a real Vercel preview or production deployment, native Neon multi-session contention, vendor DPA/data-region/retention terms, or provisioned production credentials. Phases 02–10 have roadmap outlines only; each requires Superpowers brainstorming/design approval, a detailed design, and an approved implementation plan before later code work.
 
