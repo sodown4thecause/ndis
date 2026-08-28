@@ -78,6 +78,11 @@ describe("tenant repository", () => {
     expect(predicates).toHaveLength(3);
     expect(predicates.every((predicate) => predicate.context === tenantId)).toBe(true);
     expect(predicates.every((predicate) => predicate.params[0] === tenantId)).toBe(true);
+    expect(predicates.map((predicate) => predicate.sql)).toEqual([
+      '"tenants"."id" = $1',
+      '"workers"."tenant_id" = $1',
+      '"participants"."tenant_id" = $1',
+    ]);
   });
 
   it("creates an audited bootstrap through the FoundationStore path", async () => {
