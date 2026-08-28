@@ -130,8 +130,11 @@ export function createDrizzleFoundationStore(db: AppDb, options: { now?: () => D
               .where(eq(auditEvents.tenantId, normalizedTenantId))
               .orderBy(desc(auditEvents.createdOrder))
               .limit(1);
-            const orderResult = await tx.execute(sql`select nextval('audit_events_created_order_seq') as created_order`);
-            const createdOrder = Number((orderResult as { rows?: Array<{ created_order?: number | string }> }).rows?.[0]?.created_order);
+            const orderResult = await tx.execute(sql`select nextval('audit_events_created_order_seq') as "createdOrder"`);
+            const orderRow = (orderResult as {
+              rows?: Array<{ createdOrder?: number | string; created_order?: number | string }>;
+            } | undefined)?.rows?.[0];
+            const createdOrder = Number(orderRow?.createdOrder ?? orderRow?.created_order);
             if (!Number.isSafeInteger(createdOrder) || createdOrder < 1) {
               throw new Error("Database did not return a valid audit order");
             }

@@ -93,10 +93,25 @@ describe("tenant repository", () => {
       participant: "00000000-0000-4000-8000-000000000014",
     };
     const insertedTables: unknown[] = [];
+    const auditCalls: string[] = [];
+    let nextAuditOrder = 0;
+    const dialect = new PgDialect();
     const db = {
       async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
         const tx = {
-          async execute() {},
+          async execute(query: Parameters<PgDialect["sqlToQuery"]>[0]) {
+            const generated = dialect.sqlToQuery(query);
+            if (generated.sql.includes("pg_advisory_xact_lock")) {
+              auditCalls.push("lock");
+              return { rows: [] };
+            }
+            if (generated.sql.includes("nextval")) {
+              auditCalls.push("sequence");
+              nextAuditOrder += 1;
+              return { rows: [{ createdOrder: nextAuditOrder }] };
+            }
+            return { rows: [] };
+          },
           select() {
             return {
               from() {
@@ -105,7 +120,10 @@ describe("tenant repository", () => {
                     return {
                       orderBy() {
                         return {
-                          limit: async () => [],
+                          limit: async () => {
+                            auditCalls.push("head");
+                            return [];
+                          },
                         };
                       },
                     };
@@ -146,6 +164,54 @@ describe("tenant repository", () => {
     expect(result.tenant.id).toBe(ids.tenant);
     expect(result.auditEvents).toHaveLength(4);
     expect(insertedTables.filter((table) => table === auditEvents)).toHaveLength(4);
+    expect(result.auditEvents.map(({ createdOrder }) => createdOrder)).toEqual([1, 2, 3, 4]);
+    expect(auditCalls).toEqual([
+      "lock", "head", "sequence",
+      "lock", "head", "sequence",
+      "lock", "head", "sequence",
+      "lock", "head", "sequence",
+    ]);
+  });
+
+  it("reports the explicit audit-order error for an undefined sequence result", async () => {
+    const dialect = new PgDialect();
+    const db = {
+      async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
+        const tx = {
+          async execute(query: Parameters<PgDialect["sqlToQuery"]>[0]) {
+            const generated = dialect.sqlToQuery(query);
+            if (generated.sql.includes("nextval")) return undefined;
+            return { rows: [] };
+          },
+          select() {
+            return {
+              from() {
+                return {
+                  where() {
+                    return {
+                      orderBy() {
+                        return { async limit() { return []; } };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+        return operation(tx);
+      },
+    };
+    const store = createDrizzleFoundationStore(db as Parameters<typeof createDrizzleFoundationStore>[0]);
+
+    await expect(store.transaction((tx) => tx.appendAuditEvent({
+      tenantId,
+      actorReference: "system",
+      action: "note",
+      entityType: "tenant",
+      entityId: tenantId,
+      payload: { message: "event" },
+    }))).rejects.toThrow("Database did not return a valid audit order");
   });
 
   it("orders listed audit events by created_order ascending", async () => {
