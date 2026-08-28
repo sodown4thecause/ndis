@@ -47,6 +47,26 @@ async function countRows(pg: PGlite, table: string): Promise<number> {
   return Number(result[0]?.count ?? 0);
 }
 
+function errorMessageChain(error: unknown): string {
+  const messages: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (typeof current === "string") {
+      messages.push(current);
+      break;
+    }
+    if (typeof current !== "object") break;
+    const message = Reflect.get(current, "message");
+    if (typeof message === "string") messages.push(message);
+    current = Reflect.get(current, "cause");
+  }
+
+  return messages.join("\n");
+}
+
 async function withTenantContext<T>(pg: PGlite, tenantId: string, operation: () => Promise<T>): Promise<T> {
   await pg.query("BEGIN");
   try {
@@ -128,7 +148,13 @@ describe("Task 4 live PostgreSQL persistence", () => {
     await pg.query(`CREATE TRIGGER fail_participant_audit_trigger BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION fail_participant_audit()`);
     await pg.query(`SET ROLE ${appRole}`);
 
-    await expect(service.bootstrapTenant(bootstrapInput("rollback"))).rejects.toThrow(/Failed query/);
+    let bootstrapError: unknown;
+    try {
+      await service.bootstrapTenant(bootstrapInput("rollback"));
+    } catch (error) {
+      bootstrapError = error;
+    }
+    expect(errorMessageChain(bootstrapError)).toContain("forced audit insert failure");
 
     await pg.query("RESET ROLE");
     await expect(Promise.all(["tenants", "sites", "workers", "participants", "audit_events"].map((table) => countRows(pg, table)))).resolves.toEqual([0, 0, 0, 0, 0]);
