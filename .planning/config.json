@@ -1,0 +1,16 @@
+{
+  "project_name": "Attesta",
+  "workflow": "superpowers",
+  "spec_format": "superpowers-design-and-plan",
+  "source_prd": "PRD-ATTESTA.md",
+  "source_gtm": "GTM-SEO-GEO-STRATEGY.md",
+  "mvp_deadline_days": 90,
+  "application_platform": "vercel",
+  "database": "neon-postgresql",
+  "identity": "workos-authkit",
+  "email": "resend",
+  "ai_routing": "vercel-ai-gateway",
+  "primary_app_region": "syd1",
+  "primary_database_region": "ap-southeast-2",
+  "beachhead_jurisdiction": "QLD"
+}
