@@ -2,9 +2,16 @@
   "name": "@attesta/db",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@neondatabase/serverless": "latest",
+    "drizzle-orm": "latest"
+  },
+  "devDependencies": {
+    "drizzle-kit": "latest"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "db:check": "echo database schema not created yet",
+    "db:check": "drizzle-kit check --config drizzle.config.ts",
     "test:db": "vitest run"
   }
 }

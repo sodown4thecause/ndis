@@ -1,6 +1,7 @@
 {
   "name": "attesta",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@11.5.0",
   "engines": {
     "node": ">=22 <23"
