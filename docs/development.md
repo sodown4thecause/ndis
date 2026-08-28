@@ -15,9 +15,17 @@ pnpm build
 
 The supported toolchain is Node.js 22.x and pnpm 11.5.0. The current development host must use that toolchain before release verification; Node 25 is not a release target.
 
+Synthetic bootstrap is disabled by default. For local development only, set `ENABLE_SYNTHETIC_BOOTSTRAP=true` in an untracked `.env.local`; Playwright sets the same flag in its test web server configuration. The route also rejects the flag whenever `NODE_ENV=production`, and `/bootstrap` is not rendered when the flag is disabled. The endpoint uses a 16 KiB request limit and 120-character field limits, and returns stable non-sensitive errors. Production provisioning is intentionally disabled; authenticated, rate-controlled provisioning is Phase 02 work and must not rely on an in-memory serverless limiter.
+
 Database setup uses a disposable Neon branch or PostgreSQL database. Set `DATABASE_URL` for the application and a separate `DATABASE_MIGRATION_URL` for the migration owner in `.env.local`, then run `pnpm --filter @attesta/db db:migrate`, `pnpm --filter @attesta/db db:check`, and `pnpm --filter @attesta/db db:generate` as needed. Database-backed verification runs with `pnpm test:db`.
 
 The deployed application uses a least-privilege `attesta_runtime` login granted the `attesta_app` group role. `attesta_app` is `NOLOGIN NOBYPASSRLS` with explicit schema/table/sequence grants and no audit `UPDATE` or `DELETE` grant. Provision the login authentication and the separate migration-owner connection outside source control; no password or real credential belongs in this repository. See `packages/db/README.md` for the role posture and example grants.
+
+## Vercel project root
+
+Use one Vercel project with the repository root as Project Root (leave the dashboard Root Directory empty). `vercel.json` therefore uses root-relative commands and output: Vercel installs from the repository root, runs `pnpm --filter @attesta/web build`, and consumes the Next.js output at `apps/web/.next`. The explicit output directory is valid here because it is relative to the repository Project Root and points to the nested app's framework output. A Vercel preview deployment is still a launch gate and has not been performed by this local verification.
+
+Liveness is intentionally independent of database credentials (`GET /api/health`). A separate authenticated readiness check that verifies database connectivity and migrations is Phase 02/production work.
 
 ## Deployment boundary
 

@@ -7,16 +7,18 @@ import {
 } from "@attesta/db";
 import type { NewTenantInput } from "@attesta/domain";
 import { z } from "zod";
-import { getDatabaseUrl } from "../../../lib/env";
+import { getDatabaseUrl, isSyntheticBootstrapEnabled } from "../../../lib/env";
 
 export const runtime = "nodejs";
 
 const tenantInputSchema = z.object({
-  name: z.string().trim().min(1),
-  siteName: z.string().trim().min(1),
-  workerName: z.string().trim().min(1),
-  participantName: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(120),
+  siteName: z.string().trim().min(1).max(120),
+  workerName: z.string().trim().min(1).max(120),
+  participantName: z.string().trim().min(1).max(120),
 }).strict();
+
+const MAX_REQUEST_BYTES = 16 * 1024;
 
 export type FoundationServiceLike = {
   bootstrapTenant(input: NewTenantInput): Promise<TenantBootstrapResult>;
@@ -57,21 +59,70 @@ function serviceFailureResponse(error: unknown): Response {
   return Response.json({ error: "Service unavailable" }, { status: 503 });
 }
 
-async function parseTenantInput(request: Request): Promise<NewTenantInput | null> {
-  try {
-    return tenantInputSchema.parse(await request.json());
-  } catch {
+function disabledResponse(): Response {
+  return Response.json({ error: "Not found" }, { status: 404 });
+}
+
+type ParsedTenantInput = { input: NewTenantInput } | { response: Response };
+
+async function readBodyWithinLimit(request: Request): Promise<string | null> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && Number.isFinite(Number(contentLength)) && Number(contentLength) > MAX_REQUEST_BYTES) {
     return null;
+  }
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_REQUEST_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
+}
+
+async function parseTenantInput(request: Request): Promise<ParsedTenantInput> {
+  let body: string | null;
+  try {
+    body = await readBodyWithinLimit(request);
+  } catch {
+    return { response: invalidRequestResponse() };
+  }
+  if (body === null) return { response: Response.json({ error: "Request too large" }, { status: 413 }) };
+
+  try {
+    return { input: tenantInputSchema.parse(JSON.parse(body)) };
+  } catch {
+    return { response: invalidRequestResponse() };
   }
 }
 
 export function createPostHandler(service: FoundationServiceLike) {
   return async function postTenant(request: Request): Promise<Response> {
-    const input = await parseTenantInput(request);
-    if (!input) return invalidRequestResponse();
+    if (!isSyntheticBootstrapEnabled()) return disabledResponse();
+    const parsed = await parseTenantInput(request);
+    if ("response" in parsed) return parsed.response;
 
     try {
-      const result = await service.bootstrapTenant(input);
+      const result = await service.bootstrapTenant(parsed.input);
       return Response.json(responseBody(result), { status: 201 });
     } catch (error) {
       return serviceFailureResponse(error);
@@ -91,13 +142,14 @@ export function createDefaultPostHandler(
   const createService = dependencies.createService ?? defaultCreateService;
 
   return async function postTenant(request: Request): Promise<Response> {
-    const input = await parseTenantInput(request);
-    if (!input) return invalidRequestResponse();
+    if (!isSyntheticBootstrapEnabled()) return disabledResponse();
+    const parsed = await parseTenantInput(request);
+    if ("response" in parsed) return parsed.response;
 
     let db: DatabaseHandle | undefined;
     try {
       db = createDatabase(resolveDatabaseUrl());
-      const result = await createService(db).bootstrapTenant(input);
+      const result = await createService(db).bootstrapTenant(parsed.input);
       return Response.json(responseBody(result), { status: 201 });
     } catch (error) {
       return serviceFailureResponse(error);

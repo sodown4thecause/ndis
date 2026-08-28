@@ -6,6 +6,7 @@ export default defineConfig({
   webServer: {
     command: "pnpm --filter @attesta/web dev",
     url: "http://127.0.0.1:3000/api/health",
+    env: { ENABLE_SYNTHETIC_BOOTSTRAP: "true" },
     reuseExistingServer: true,
   },
 });

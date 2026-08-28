@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultPostHandler, createPostHandler, type FoundationServiceLike } from "./route";
 
 const service: FoundationServiceLike = {
@@ -19,7 +19,53 @@ const service: FoundationServiceLike = {
   },
 };
 
+const originalNodeEnv = process.env.NODE_ENV;
+const originalSyntheticBootstrapFlag = process.env.ENABLE_SYNTHETIC_BOOTSTRAP;
+const environment = process.env as unknown as Record<string, string | undefined>;
+
+beforeEach(() => {
+  environment.NODE_ENV = "test";
+  process.env.ENABLE_SYNTHETIC_BOOTSTRAP = "true";
+});
+
+afterEach(() => {
+  if (originalNodeEnv === undefined) delete environment.NODE_ENV;
+  else environment.NODE_ENV = originalNodeEnv;
+  if (originalSyntheticBootstrapFlag === undefined) delete process.env.ENABLE_SYNTHETIC_BOOTSTRAP;
+  else process.env.ENABLE_SYNTHETIC_BOOTSTRAP = originalSyntheticBootstrapFlag;
+});
+
 describe("POST /api/tenants", () => {
+  it("is disabled without the explicit synthetic bootstrap flag", async () => {
+    delete process.env.ENABLE_SYNTHETIC_BOOTSTRAP;
+    const bootstrapTenant = vi.fn(service.bootstrapTenant);
+
+    const response = await createPostHandler({ bootstrapTenant })(new Request("http://localhost/api/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: "Example SIL", siteName: "House 1", workerName: "Worker One", participantName: "Participant One" }),
+      headers: { "content-type": "application/json" },
+    }));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "Not found" });
+    expect(bootstrapTenant).not.toHaveBeenCalled();
+  });
+
+  it("cannot be enabled in production by setting the flag", async () => {
+    environment.NODE_ENV = "production";
+    const bootstrapTenant = vi.fn(service.bootstrapTenant);
+
+    const response = await createPostHandler({ bootstrapTenant })(new Request("http://localhost/api/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: "Example SIL", siteName: "House 1", workerName: "Worker One", participantName: "Participant One" }),
+      headers: { "content-type": "application/json" },
+    }));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "Not found" });
+    expect(bootstrapTenant).not.toHaveBeenCalled();
+  });
+
   it("returns a created synthetic bootstrap", async () => {
     const request = new Request("http://localhost/api/tenants", {
       method: "POST",
@@ -66,6 +112,38 @@ describe("POST /api/tenants", () => {
     const response = await createPostHandler({ bootstrapTenant })(request);
 
     expect(response.status).toBe(400);
+    expect(bootstrapTenant).not.toHaveBeenCalled();
+  });
+
+  it("rejects fields longer than the bounded maximum", async () => {
+    const bootstrapTenant = vi.fn(service.bootstrapTenant);
+    const response = await createPostHandler({ bootstrapTenant })(new Request("http://localhost/api/tenants", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "a".repeat(121),
+        siteName: "House 1",
+        workerName: "Worker One",
+        participantName: "Participant One",
+      }),
+      headers: { "content-type": "application/json" },
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid request" });
+    expect(bootstrapTenant).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request body above the bounded maximum before service execution", async () => {
+    const bootstrapTenant = vi.fn(service.bootstrapTenant);
+    const oversizedBody = `{"name":"${"a".repeat(20_000)}","name":"Example SIL","siteName":"House 1","workerName":"Worker One","participantName":"Participant One"}`;
+    const response = await createPostHandler({ bootstrapTenant })(new Request("http://localhost/api/tenants", {
+      method: "POST",
+      body: oversizedBody,
+      headers: { "content-type": "application/json" },
+    }));
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ error: "Request too large" });
     expect(bootstrapTenant).not.toHaveBeenCalled();
   });
 

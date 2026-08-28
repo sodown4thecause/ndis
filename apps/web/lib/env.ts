@@ -6,3 +6,7 @@ export function getDatabaseUrl(): string {
 
   return databaseUrl;
 }
+
+export function isSyntheticBootstrapEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.ENABLE_SYNTHETIC_BOOTSTRAP === "true";
+}
