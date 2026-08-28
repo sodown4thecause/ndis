@@ -134,4 +134,108 @@ describe("audit repository input", () => {
     expect(lockKey).toBe("attesta:audit-chain:00000000-0000-4000-8000-00000000000a");
     expect(headTenantId).toBe("00000000-0000-4000-8000-00000000000a");
   });
+
+  type ReturnedAuditRow = {
+    id: string;
+    createdOrder: number;
+    tenantId: string;
+    actorReference: string;
+    action: string;
+    entityType: string;
+    entityId: string | null;
+    payload: string;
+    payloadHash: string;
+    previousHash: string | null;
+    eventHash: string;
+    createdAt: Date;
+    retentionUntil: Date;
+  };
+
+  const returnedRowMutations: Array<[string, (row: ReturnedAuditRow) => void]> = [
+    ["id", (row) => { row.id = "00000000-0000-4000-8000-000000000099"; }],
+    ["createdOrder", (row) => { row.createdOrder += 1; }],
+    ["tenantId", (row) => { row.tenantId = "00000000-0000-4000-8000-000000000099"; }],
+    ["actorReference", (row) => { row.actorReference = "altered-actor"; }],
+    ["action", (row) => { row.action = "altered-action"; }],
+    ["entityType", (row) => { row.entityType = "altered-entity"; }],
+    ["entityId", (row) => { row.entityId = "00000000-0000-4000-8000-000000000099"; }],
+    ["payload", (row) => { row.payload = '{"altered":true}'; }],
+    ["payloadHash", (row) => { row.payloadHash = "1".repeat(64); }],
+    ["previousHash", (row) => { row.previousHash = "2".repeat(64); }],
+    ["eventHash", (row) => { row.eventHash = "3".repeat(64); }],
+    ["createdAt", (row) => { row.createdAt = new Date(row.createdAt.getTime() + 1_000); }],
+    ["retentionUntil", (row) => { row.retentionUntil = new Date(row.retentionUntil.getTime() + 1_000); }],
+  ];
+
+  it.each(returnedRowMutations)("rejects a returned row whose %s differs from the pre-hash event", async (field, mutate) => {
+    const dialect = new PgDialect();
+    const db = {
+      async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
+        const tx = {
+          async execute(query: Parameters<PgDialect["sqlToQuery"]>[0]) {
+            const generated = dialect.sqlToQuery(query);
+            if (generated.sql.includes("nextval")) return { rows: [{ created_order: 2 }] };
+            return { rows: [] };
+          },
+          select() {
+            return {
+              from() {
+                return {
+                  where() {
+                    return {
+                      orderBy() {
+                        return { async limit() { return []; } };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+          insert() {
+            return {
+              values(values: ReturnedAuditRow) {
+                return {
+                  async returning() {
+                    const returned = { ...values };
+                    mutate(returned);
+                    if (field !== "eventHash") {
+                      returned.eventHash = computeAuditEventHash({
+                        id: returned.id,
+                        previousHash: returned.previousHash,
+                        tenantId: returned.tenantId,
+                        actorReference: returned.actorReference,
+                        action: returned.action,
+                        entityType: returned.entityType,
+                        entityId: returned.entityId,
+                        payload: returned.payload,
+                        payloadHash: returned.payloadHash,
+                        retentionUntil: returned.retentionUntil.toISOString(),
+                        createdAt: returned.createdAt.toISOString(),
+                        createdOrder: returned.createdOrder,
+                      });
+                    }
+                    return [returned];
+                  },
+                };
+              },
+            };
+          },
+        };
+        return operation(tx);
+      },
+    };
+    const store = createDrizzleFoundationStore(db as Parameters<typeof createDrizzleFoundationStore>[0], {
+      now: () => new Date("2026-08-28T14:35:27.123Z"),
+    });
+
+    await expect(store.transaction((tx) => tx.appendAuditEvent({
+      tenantId: "00000000-0000-4000-8000-00000000000a",
+      actorReference: "system",
+      action: "note",
+      entityType: "tenant",
+      entityId: "00000000-0000-4000-8000-00000000000a",
+      payload: { message: "event" },
+    }))).rejects.toThrow("Persisted audit event does not match its hashed envelope");
+  });
 });

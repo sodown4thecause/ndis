@@ -168,6 +168,81 @@ describe("Task 4 live PostgreSQL persistence", () => {
     await expect(service.verifyTenantAuditChain(result.tenant.id)).resolves.toEqual({ valid: true, checked: 4, firstInvalidIndex: null });
   });
 
+  it("allocates globally unique audit order values across tenants", async () => {
+    const { pg, service } = await createDatabase();
+    const first = await service.bootstrapTenant(bootstrapInput("sequence-first"));
+    const second = await service.bootstrapTenant(bootstrapInput("sequence-second"));
+
+    const firstOrders = await withTenantContext(pg, first.tenant.id, () => rows<{ createdOrder: number }>(
+      pg,
+      "SELECT created_order::int AS \"createdOrder\" FROM audit_events ORDER BY created_order",
+    ));
+    const secondOrders = await withTenantContext(pg, second.tenant.id, () => rows<{ createdOrder: number }>(
+      pg,
+      "SELECT created_order::int AS \"createdOrder\" FROM audit_events ORDER BY created_order",
+    ));
+    const allOrders = [...firstOrders, ...secondOrders].map(({ createdOrder }) => createdOrder);
+
+    expect(allOrders).toHaveLength(8);
+    expect(new Set(allOrders).size).toBe(8);
+    expect(firstOrders.every(({ createdOrder }) => !secondOrders.some((row) => row.createdOrder === createdOrder))).toBe(true);
+  });
+
+  it("keeps a valid chain across a sequence gap consumed by a rolled-back append", async () => {
+    const { pg, service } = await createDatabase();
+    const bootstrap = await service.bootstrapTenant(bootstrapInput("sequence-gap"));
+    const beforeFailure = bootstrap.auditEvents.at(-1);
+
+    await pg.query("RESET ROLE");
+    await pg.query(`
+      CREATE FUNCTION fail_forced_audit() RETURNS trigger LANGUAGE plpgsql AS $f$
+      BEGIN
+        IF NEW.action = 'forced-failure' THEN RAISE EXCEPTION 'forced sequence-consuming failure'; END IF;
+        RETURN NEW;
+      END;
+      $f$;
+    `);
+    await pg.query("CREATE TRIGGER fail_forced_audit_trigger BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION fail_forced_audit()");
+    await pg.query(`SET ROLE ${runtimeRole}`);
+
+    let appendError: unknown;
+    try {
+      await service.appendAuditEvent({
+        tenantId: bootstrap.tenant.id,
+        actorReference: "system",
+        action: "forced-failure",
+        entityType: "tenant",
+        entityId: bootstrap.tenant.id,
+        payload: { synthetic: true },
+      });
+    } catch (error) {
+      appendError = error;
+    }
+    expect(errorMessageChain(appendError)).toContain("forced sequence-consuming failure");
+
+    await pg.query("RESET ROLE");
+    await pg.query("DROP TRIGGER fail_forced_audit_trigger ON audit_events");
+    await pg.query("DROP FUNCTION fail_forced_audit()");
+    await pg.query(`SET ROLE ${runtimeRole}`);
+
+    const committed = await service.appendAuditEvent({
+      tenantId: bootstrap.tenant.id,
+      actorReference: "system",
+      action: "after-failure",
+      entityType: "tenant",
+      entityId: bootstrap.tenant.id,
+      payload: { synthetic: true },
+    });
+
+    expect(beforeFailure).toBeDefined();
+    expect(committed.createdOrder).toBe((beforeFailure?.createdOrder ?? 0) + 2);
+    await expect(service.verifyTenantAuditChain(bootstrap.tenant.id)).resolves.toEqual({
+      valid: true,
+      checked: 5,
+      firstInvalidIndex: null,
+    });
+  });
+
   it("rolls back every domain and audit row when the audit insert is forced to fail", async () => {
     const { pg, service } = await createDatabase();
     await pg.query("RESET ROLE");

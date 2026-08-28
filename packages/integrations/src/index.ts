@@ -41,7 +41,14 @@ export function createAiAuditMetadata(input: AiAuditMetadata): AiAuditMetadata {
   for (const field of ["promptHash", "outputHash"] as const) {
     if (!SHA256_PATTERN.test(input[field])) throw new Error(`${field} must be a SHA-256 hash`);
   }
-  return Object.freeze({ ...input });
+  return Object.freeze({
+    model: input.model,
+    provider: input.provider,
+    version: input.version,
+    promptHash: input.promptHash,
+    outputHash: input.outputHash,
+    approver: input.approver,
+  });
 }
 
 export type WorkOSIdentityReference = Readonly<{

@@ -159,6 +159,15 @@ export function createDrizzleFoundationStore(db: AppDb, options: { now?: () => D
             if (
               persisted.id !== event.id
               || persisted.createdOrder !== event.createdOrder
+              || persisted.tenantId !== event.tenantId
+              || persisted.actorReference !== event.actorReference
+              || persisted.action !== event.action
+              || persisted.entityType !== event.entityType
+              || persisted.entityId !== event.entityId
+              || persisted.payload !== event.payload
+              || persisted.payloadHash !== event.payloadHash
+              || persisted.previousHash !== event.previousHash
+              || persisted.eventHash !== event.eventHash
               || persisted.createdAt.getTime() !== event.createdAt.getTime()
               || persisted.retentionUntil.getTime() !== event.retentionUntil.getTime()
               || persisted.eventHash !== computeAuditEventHash(persistedEnvelope)

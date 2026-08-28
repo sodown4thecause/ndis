@@ -45,6 +45,27 @@ describe("Phase 01 integration boundaries", () => {
     expect(() => createAiAuditMetadata({ ...metadata, promptHash: "not-a-hash" })).toThrow("promptHash");
   });
 
+  it("drops runtime properties outside the AI audit metadata contract", () => {
+    const inputWithExtraProperty = {
+      model: "model-synthetic",
+      provider: "provider-synthetic",
+      version: "v1",
+      promptHash: "a".repeat(64),
+      outputHash: "b".repeat(64),
+      approver: "user-synthetic",
+      rawPrompt: "must not cross the audit metadata boundary",
+    };
+
+    expect(createAiAuditMetadata(inputWithExtraProperty)).toEqual({
+      model: "model-synthetic",
+      provider: "provider-synthetic",
+      version: "v1",
+      promptHash: "a".repeat(64),
+      outputHash: "b".repeat(64),
+      approver: "user-synthetic",
+    });
+  });
+
   it("exposes only a WorkOS identity reference at the identity boundary", () => {
     expect(createWorkOSIdentityReference({ subject: "user-synthetic" })).toEqual({
       provider: "workos",

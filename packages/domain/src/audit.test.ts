@@ -76,6 +76,7 @@ describe("audit chain", () => {
   });
 
   it.each([
+    ["event id", { id: "00000000-0000-4000-8000-000000000011" }],
     ["tenant", { tenantId: "00000000-0000-4000-8000-000000000002" }],
     ["actor", { actorReference: "different-actor" }],
     ["action", { action: "update" }],
