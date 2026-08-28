@@ -2,13 +2,19 @@
   "name": "@attesta/db",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./repositories/tenant-repository": "./src/repositories/tenant-repository.ts",
+    "./services/foundation-service": "./src/services/foundation-service.ts"
+  },
   "dependencies": {
     "@attesta/domain": "workspace:*",
-    "@neondatabase/serverless": "latest",
-    "drizzle-orm": "latest"
+    "@neondatabase/serverless": "1.1.0",
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
-    "drizzle-kit": "latest"
+    "drizzle-kit": "0.31.10"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
