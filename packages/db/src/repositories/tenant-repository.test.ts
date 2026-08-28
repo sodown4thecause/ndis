@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { auditEvents, participants, tenants, workers } from "../schema";
-import { createTenantRepository } from "./tenant-repository";
+import { createDrizzleFoundationStore, createTenantRepository } from "./tenant-repository";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
 
@@ -97,6 +97,23 @@ describe("tenant repository", () => {
       async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
         const tx = {
           async execute() {},
+          select() {
+            return {
+              from() {
+                return {
+                  where() {
+                    return {
+                      orderBy() {
+                        return {
+                          limit: async () => [],
+                        };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
           insert(table: unknown) {
             return {
               values(values: Record<string, unknown>) {
@@ -129,5 +146,41 @@ describe("tenant repository", () => {
     expect(result.tenant.id).toBe(ids.tenant);
     expect(result.auditEvents).toHaveLength(4);
     expect(insertedTables.filter((table) => table === auditEvents)).toHaveLength(4);
+  });
+
+  it("orders listed audit events by created_order ascending", async () => {
+    const dialect = new PgDialect();
+    const orderByQueries: { sql: string; params: unknown[] }[] = [];
+    const expectedEvents = [
+      { id: "audit-1", createdOrder: 1 },
+      { id: "audit-2", createdOrder: 2 },
+    ];
+    const db = {
+      async transaction<T>(operation: (tx: unknown) => Promise<T>): Promise<T> {
+        const tx = {
+          select() {
+            return {
+              from() {
+                return {
+                  where() {
+                    return {
+                      async orderBy(order: Parameters<PgDialect["sqlToQuery"]>[0]) {
+                        orderByQueries.push(dialect.sqlToQuery(order));
+                        return expectedEvents;
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+        return operation(tx);
+      },
+    };
+
+    const store = createDrizzleFoundationStore(db as Parameters<typeof createDrizzleFoundationStore>[0]);
+    await expect(store.transaction((tx) => tx.listAuditEvents(tenantId))).resolves.toEqual(expectedEvents);
+    expect(orderByQueries).toEqual([{ sql: '"audit_events"."created_order" asc', params: [] }]);
   });
 });

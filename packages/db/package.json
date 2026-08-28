@@ -16,11 +16,12 @@
   },
   "devDependencies": {
     "@types/ws": "8.18.1",
+    "@electric-sql/pglite": "0.5.8",
     "drizzle-kit": "0.31.10"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:check": "drizzle-kit check --config drizzle.config.ts",
-    "test:db": "vitest run"
+    "test:db": "vitest run src/integration/task-4.db.test.ts"
   }
 }
