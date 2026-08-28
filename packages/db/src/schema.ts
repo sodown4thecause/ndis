@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 
@@ -14,7 +15,10 @@ export const sites = pgTable("sites", {
   name: text("name").notNull(),
   status: varchar("status", { length: 32 }).notNull().default("active"),
   createdAt: createdAt(),
-});
+}, (table) => [
+  index("sites_tenant_id_idx").on(table.tenantId),
+  check("sites_status_check", sql`${table.status} in ('active', 'inactive', 'archived')`),
+]);
 
 export const workers = pgTable("workers", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -23,7 +27,10 @@ export const workers = pgTable("workers", {
   name: text("name").notNull(),
   status: varchar("status", { length: 32 }).notNull().default("active"),
   createdAt: createdAt(),
-});
+}, (table) => [
+  index("workers_tenant_id_idx").on(table.tenantId),
+  check("workers_status_check", sql`${table.status} in ('active', 'inactive', 'archived')`),
+]);
 
 export const participants = pgTable("participants", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -33,7 +40,11 @@ export const participants = pgTable("participants", {
   preferredFormat: varchar("preferred_format", { length: 32 }).notNull().default("plain-language"),
   status: varchar("status", { length: 32 }).notNull().default("active"),
   createdAt: createdAt(),
-});
+}, (table) => [
+  index("participants_tenant_id_idx").on(table.tenantId),
+  check("participants_preferred_format_check", sql`${table.preferredFormat} in ('plain-language', 'easy-read', 'audio')`),
+  check("participants_status_check", sql`${table.status} in ('active', 'inactive', 'archived')`),
+]);
 
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -48,4 +59,4 @@ export const auditEvents = pgTable("audit_events", {
   eventHash: varchar("event_hash", { length: 64 }).notNull(),
   createdAt: createdAt(),
   retentionUntil: timestamp("retention_until", { withTimezone: true }).notNull(),
-});
+}, (table) => [index("audit_events_tenant_id_created_at_idx").on(table.tenantId, table.createdAt)]);

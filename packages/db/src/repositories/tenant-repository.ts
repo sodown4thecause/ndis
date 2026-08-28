@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AppDb } from "../client";
 import { auditEvents, participants, sites, tenants, workers } from "../schema";
+import { withTenant } from "../tenant-context";
 import type { AuditEventInput } from "./audit-repository";
 import type {
   AuditEventRecord,
@@ -15,6 +16,65 @@ import type {
 function requiredRow<T>(row: T | undefined): T {
   if (!row) throw new Error("Database insert returned no row");
   return row;
+}
+
+export type TenantRepository = {
+  getTenant(tenantId: string): Promise<TenantRecord | null>;
+  listTenantPeople(tenantId: string): Promise<TenantPerson[]>;
+};
+
+export type TenantPerson = {
+  id: string;
+  tenantId: string;
+  siteId: string;
+  name: string;
+  status: string;
+  kind: "worker" | "participant";
+  preferredFormat: string | null;
+};
+
+export function createTenantRepository(db: AppDb): TenantRepository {
+  return {
+    async getTenant(tenantId) {
+      return withTenant(db, tenantId, async (tx) => {
+        const rows = await tx
+          .select({ id: tenants.id, name: tenants.name })
+          .from(tenants)
+          .where(eq(tenants.id, tenantId));
+        return rows[0] ?? null;
+      });
+    },
+    async listTenantPeople(tenantId) {
+      return withTenant(db, tenantId, async (tx) => {
+        const workerRows = await tx
+          .select({
+            id: workers.id,
+            tenantId: workers.tenantId,
+            siteId: workers.siteId,
+            name: workers.name,
+            status: workers.status,
+          })
+          .from(workers)
+          .where(eq(workers.tenantId, tenantId));
+        const participantRows = await tx
+          .select({
+            id: participants.id,
+            tenantId: participants.tenantId,
+            siteId: participants.siteId,
+            name: participants.name,
+            status: participants.status,
+            preferredFormat: participants.preferredFormat,
+          })
+          .from(participants)
+          .where(eq(participants.tenantId, tenantId));
+
+        return [
+          ...workerRows.map((row) => ({ ...row, kind: "worker" as const, preferredFormat: null })),
+          ...participantRows.map((row) => ({ ...row, kind: "participant" as const })),
+        ];
+      });
+    },
+  };
 }
 
 export function createDrizzleFoundationStore(db: AppDb): FoundationStore {

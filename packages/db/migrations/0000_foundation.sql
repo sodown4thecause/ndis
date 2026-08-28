@@ -11,6 +11,7 @@ CREATE TABLE sites (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name text NOT NULL,
   status varchar(32) NOT NULL DEFAULT 'active',
+  CONSTRAINT sites_status_check CHECK (status IN ('active', 'inactive', 'archived')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -20,6 +21,7 @@ CREATE TABLE workers (
   site_id uuid NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   name text NOT NULL,
   status varchar(32) NOT NULL DEFAULT 'active',
+  CONSTRAINT workers_status_check CHECK (status IN ('active', 'inactive', 'archived')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -30,6 +32,8 @@ CREATE TABLE participants (
   name text NOT NULL,
   preferred_format varchar(32) NOT NULL DEFAULT 'plain-language',
   status varchar(32) NOT NULL DEFAULT 'active',
+  CONSTRAINT participants_preferred_format_check CHECK (preferred_format IN ('plain-language', 'easy-read', 'audio')),
+  CONSTRAINT participants_status_check CHECK (status IN ('active', 'inactive', 'archived')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

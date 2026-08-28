@@ -23,6 +23,6 @@ export function withTenant<T, TTransaction extends TenantTransaction>(
   const validTenantId = assertTenantId(tenantId);
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.tenant_id', ${validTenantId}, true)`);
-    return operation(tx);
+    return await operation(tx);
   });
 }
