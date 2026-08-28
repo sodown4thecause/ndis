@@ -1,0 +1,10 @@
+{
+  "name": "@attesta/db",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:check": "echo database schema not created yet",
+    "test:db": "vitest run"
+  }
+}
