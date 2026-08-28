@@ -1,4 +1,4 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- gen_random_uuid() is built into supported PostgreSQL/Neon versions.
 
 CREATE TABLE tenants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -42,6 +42,7 @@ CREATE TABLE participants (
 
 CREATE TABLE audit_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_order bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   actor_reference text NOT NULL,
   action varchar(64) NOT NULL,
@@ -59,9 +60,12 @@ CREATE INDEX sites_tenant_id_idx ON sites(tenant_id);
 CREATE INDEX workers_tenant_id_idx ON workers(tenant_id);
 CREATE INDEX participants_tenant_id_idx ON participants(tenant_id);
 CREATE INDEX audit_events_tenant_id_created_at_idx ON audit_events(tenant_id, created_at);
+CREATE INDEX audit_events_tenant_id_created_order_idx ON audit_events(tenant_id, created_order);
 
 ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sites FORCE ROW LEVEL SECURITY;
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 ALTER TABLE workers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workers FORCE ROW LEVEL SECURITY;
 ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
@@ -72,6 +76,9 @@ ALTER TABLE audit_events FORCE ROW LEVEL SECURITY;
 CREATE POLICY sites_tenant_isolation ON sites
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+CREATE POLICY tenants_tenant_isolation ON tenants
+  USING (id = current_setting('app.tenant_id', true)::uuid)
+  WITH CHECK (id = current_setting('app.tenant_id', true)::uuid);
 CREATE POLICY workers_tenant_isolation ON workers
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
@@ -81,3 +88,18 @@ CREATE POLICY participants_tenant_isolation ON participants
 CREATE POLICY audit_events_tenant_isolation ON audit_events
   USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE OR REPLACE FUNCTION prevent_audit_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_events is append-only';
+END;
+$$;
+
+REVOKE UPDATE, DELETE ON audit_events FROM PUBLIC;
+CREATE TRIGGER audit_events_append_only
+  BEFORE UPDATE OR DELETE ON audit_events
+  FOR EACH ROW
+  EXECUTE FUNCTION prevent_audit_event_mutation();

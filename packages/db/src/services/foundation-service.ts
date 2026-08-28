@@ -1,12 +1,11 @@
+import { randomUUID } from "node:crypto";
 import {
   createTenantBootstrap,
+  verifyAuditChain,
+  type AuditVerification,
   type NewTenantInput,
-  type TenantBootstrap,
 } from "@attesta/domain";
-import {
-  createAuditEventInput,
-  type AuditEventInput,
-} from "../repositories/audit-repository";
+import type { AuditEventInput, PersistedAuditEventInput } from "../repositories/audit-repository";
 
 export type TenantRecord = { id: string; name: string };
 export type SiteRecord = { id: string; tenantId: string; name: string };
@@ -18,15 +17,16 @@ export type ParticipantRecord = {
   name: string;
   preferredFormat: string;
 };
-export type AuditEventRecord = AuditEventInput & { id: string };
+export type AuditEventRecord = PersistedAuditEventInput & { id: string; createdAt: Date; createdOrder: number };
 
 export type FoundationTransaction = {
   setTenantContext(tenantId: string): Promise<void>;
-  createTenant(name: string): Promise<TenantRecord>;
+  createTenant(id: string, name: string): Promise<TenantRecord>;
   createSite(tenantId: string, name: string): Promise<SiteRecord>;
   createWorker(tenantId: string, siteId: string, name: string): Promise<WorkerRecord>;
   createParticipant(tenantId: string, siteId: string, name: string, preferredFormat: string): Promise<ParticipantRecord>;
-  appendAuditEvent(event: AuditEventInput): Promise<AuditEventRecord>;
+  appendAuditEvent(input: AuditEventInput): Promise<AuditEventRecord>;
+  listAuditEvents(tenantId: string): Promise<AuditEventRecord[]>;
 };
 
 export type FoundationStore = {
@@ -41,33 +41,35 @@ export type TenantBootstrapResult = {
   auditEvents: AuditEventRecord[];
 };
 
-export function createFoundationService(store: FoundationStore) {
+export type FoundationService = {
+  bootstrapTenant(input: NewTenantInput, actorReference?: string): Promise<TenantBootstrapResult>;
+  appendAuditEvent(input: AuditEventInput): Promise<AuditEventRecord>;
+  verifyTenantAuditChain(tenantId: string): Promise<AuditVerification>;
+};
+
+export function createFoundationService(store: FoundationStore): FoundationService {
   return {
-    bootstrapTenant(input: NewTenantInput, actorReference = "system"): Promise<TenantBootstrapResult> {
-      const seed: TenantBootstrap = createTenantBootstrap(input);
+    bootstrapTenant(input, actorReference = "system"): Promise<TenantBootstrapResult> {
+      const seed = createTenantBootstrap(input);
+      const tenantId = randomUUID();
 
       return store.transaction(async (tx) => {
-        let previousHash: string | null = null;
+        await tx.setTenantContext(tenantId);
+        const tenant = await tx.createTenant(tenantId, seed.tenant.name);
         const auditEvents: AuditEventRecord[] = [];
         const recordCreate = async (entityType: string, entityId: string, payload: unknown) => {
-          const event = await tx.appendAuditEvent(
-            createAuditEventInput({
-              tenantId: tenant.id,
-              actorReference,
-              action: "create",
-              entityType,
-              entityId,
-              payload,
-              previousHash,
-            }),
-          );
-          previousHash = event.eventHash;
+          const event = await tx.appendAuditEvent({
+            tenantId: tenant.id,
+            actorReference,
+            action: "create",
+            entityType,
+            entityId,
+            payload,
+          });
           auditEvents.push(event);
         };
 
-        const tenant = await tx.createTenant(seed.tenant.name);
-        await tx.setTenantContext(tenant.id);
-        await recordCreate("tenant", tenant.id, seed.tenant);
+        await recordCreate("tenant", tenant.id, tenant);
 
         const site = await tx.createSite(tenant.id, seed.site.name);
         await recordCreate("site", site.id, site);
@@ -84,6 +86,29 @@ export function createFoundationService(store: FoundationStore) {
         await recordCreate("participant", participant.id, participant);
 
         return { tenant, site, worker, participant, auditEvents };
+      });
+    },
+
+    appendAuditEvent(input) {
+      return store.transaction(async (tx) => {
+        await tx.setTenantContext(input.tenantId);
+        return tx.appendAuditEvent({
+          tenantId: input.tenantId,
+          actorReference: input.actorReference,
+          action: input.action,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          payload: input.payload,
+          retentionUntil: input.retentionUntil,
+        });
+      });
+    },
+
+    verifyTenantAuditChain(tenantId) {
+      return store.transaction(async (tx) => {
+        await tx.setTenantContext(tenantId);
+        const events = await tx.listAuditEvents(tenantId);
+        return verifyAuditChain(events.map(({ previousHash, payload, eventHash }) => ({ previousHash, payload, eventHash })));
       });
     },
   };

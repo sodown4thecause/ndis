@@ -42,6 +42,7 @@ describe("foundation schema", () => {
     ]);
     expect(columnNames(auditEvents)).toEqual([
       "id",
+      "created_order",
       "tenant_id",
       "actor_reference",
       "action",
@@ -62,6 +63,9 @@ describe("foundation schema", () => {
     expect(getTableConfig(participants).indexes.map((index) => index.config.name)).toContain("participants_tenant_id_idx");
     expect(getTableConfig(auditEvents).indexes.map((index) => index.config.name)).toContain(
       "audit_events_tenant_id_created_at_idx",
+    );
+    expect(getTableConfig(auditEvents).indexes.map((index) => index.config.name)).toContain(
+      "audit_events_tenant_id_created_order_idx",
     );
   });
 

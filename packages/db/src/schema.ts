@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { bigint, check, foreignKey, index, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const TENANT_STATUSES = ["active", "inactive", "archived"] as const;
 export type TenantStatus = (typeof TENANT_STATUSES)[number];
@@ -64,6 +64,7 @@ export const participants = pgTable("participants", {
 
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").defaultRandom().primaryKey(),
+  createdOrder: bigint("created_order", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   actorReference: text("actor_reference").notNull(),
   action: varchar("action", { length: 64 }).notNull(),
@@ -75,4 +76,7 @@ export const auditEvents = pgTable("audit_events", {
   eventHash: varchar("event_hash", { length: 64 }).notNull(),
   createdAt: createdAt(),
   retentionUntil: timestamp("retention_until", { withTimezone: true }).notNull(),
-}, (table) => [index("audit_events_tenant_id_created_at_idx").on(table.tenantId, table.createdAt)]);
+}, (table) => [
+  index("audit_events_tenant_id_created_at_idx").on(table.tenantId, table.createdAt),
+  index("audit_events_tenant_id_created_order_idx").on(table.tenantId, table.createdOrder),
+]);
