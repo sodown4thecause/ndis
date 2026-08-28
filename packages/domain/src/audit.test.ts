@@ -11,6 +11,24 @@ describe("audit chain", () => {
     expect(canonicalize({ z: 1, a: "two" })).toBe('{"a":"two","z":1}');
   });
 
+  it("sorts nested object keys independently of locale", () => {
+    expect(canonicalize({ nested: { a: 2, Z: 1 } })).toBe(
+      '{"nested":{"Z":1,"a":2}}',
+    );
+  });
+
+  it("preserves array order while canonicalizing array values", () => {
+    expect(canonicalize([{ b: 2, a: 1 }, "two", null])).toBe(
+      '[{"a":1,"b":2},"two",null]',
+    );
+  });
+
+  it("hashes a null previous link deterministically", () => {
+    expect(computeAuditHash(null, '{"action":"create"}')).toBe(
+      "e7e4f446ad1ae5e2af6590a040d2d75379b5304927c51104e9519bdac0965184",
+    );
+  });
+
   it("detects a changed payload", () => {
     const payload = canonicalize({ action: "create", entity: "tenant" });
     const event: AuditEvent = {
