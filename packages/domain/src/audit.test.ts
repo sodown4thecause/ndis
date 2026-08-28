@@ -29,6 +29,27 @@ describe("audit chain", () => {
     );
   });
 
+  it("accepts a valid non-empty chain", () => {
+    const firstHash =
+      "e7e4f446ad1ae5e2af6590a040d2d75379b5304927c51104e9519bdac0965184";
+
+    expect(
+      verifyAuditChain([
+        {
+          previousHash: null,
+          payload: '{"action":"create"}',
+          eventHash: firstHash,
+        },
+        {
+          previousHash: firstHash,
+          payload: '{"action":"update"}',
+          eventHash:
+            "6a75e7c81664f781699d4bd3328472c290cb60fbeea1b5adb337507b5dc0c060",
+        },
+      ]),
+    ).toEqual({ valid: true, checked: 2, firstInvalidIndex: null });
+  });
+
   it("detects a changed payload", () => {
     const payload = canonicalize({ action: "create", entity: "tenant" });
     const event: AuditEvent = {

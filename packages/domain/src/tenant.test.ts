@@ -13,6 +13,39 @@ describe("tenant bootstrap", () => {
     ).toThrow("Tenant name is required");
   });
 
+  it("rejects a blank site name", () => {
+    expect(() =>
+      createTenantBootstrap({
+        name: "Example SIL",
+        siteName: " ",
+        workerName: "Worker One",
+        participantName: "Participant One",
+      }),
+    ).toThrow("Site name is required");
+  });
+
+  it("rejects a blank worker name", () => {
+    expect(() =>
+      createTenantBootstrap({
+        name: "Example SIL",
+        siteName: "House 1",
+        workerName: " ",
+        participantName: "Participant One",
+      }),
+    ).toThrow("Worker name is required");
+  });
+
+  it("rejects a blank participant name", () => {
+    expect(() =>
+      createTenantBootstrap({
+        name: "Example SIL",
+        siteName: "House 1",
+        workerName: "Worker One",
+        participantName: " ",
+      }),
+    ).toThrow("Participant name is required");
+  });
+
   it("returns one site, worker, and participant seed", () => {
     expect(
       createTenantBootstrap({
