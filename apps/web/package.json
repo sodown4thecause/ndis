@@ -1,0 +1,19 @@
+{
+  "name": "@attesta/web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@attesta/db": "workspace:*",
+    "@attesta/domain": "workspace:*",
+    "eslint-config-next": "16.3.3",
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  }
+}

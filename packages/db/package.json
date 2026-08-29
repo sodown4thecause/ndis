@@ -1,0 +1,29 @@
+{
+  "name": "@attesta/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./repositories/tenant-repository": "./src/repositories/tenant-repository.ts",
+    "./services/foundation-service": "./src/services/foundation-service.ts"
+  },
+  "dependencies": {
+    "@attesta/domain": "workspace:*",
+    "@neondatabase/serverless": "1.1.0",
+    "drizzle-orm": "0.45.2",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1",
+    "@electric-sql/pglite": "0.5.8",
+    "drizzle-kit": "0.31.10"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:check": "drizzle-kit check --config drizzle.config.ts",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "test:db": "vitest run --testTimeout=30000 src/integration/migrator.db.test.ts src/integration/task-4.db.test.ts"
+  }
+}
