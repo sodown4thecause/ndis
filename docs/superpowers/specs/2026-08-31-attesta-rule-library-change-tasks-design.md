@@ -1,7 +1,7 @@
 # Attesta Rule Library and Change Tasks Design
 
 **Date:** 2026-08-31
-**Status:** Design approved in chat; written-spec review pending
+**Status:** Approved for implementation planning on 2026-09-01
 **Phase:** 03 — Rule Library & Change Tasks
 **Requirements:** RULE-01, RULE-02, RULE-03, RULE-04, RULE-05
 **Depends on:** Phase 02 — Auth & Tenant Security
