@@ -19,7 +19,7 @@ Phase 03 creates administrative change tasks only. Worker briefings, policy edit
 ## Approved decisions
 
 - Regulatory sources form one global catalog curated by Attesta platform operators. Provider tenants do not copy, fork, or edit the catalog.
-- Source capture is manual first. A protected operator command accepts plain text or Markdown plus a metadata manifest.
+- Source capture is manual first. An unlinked, WorkOS-authenticated platform command endpoint accepts bounded plain text or Markdown plus a metadata manifest.
 - No PDF/DOCX parsing, binary artifact storage, source crawling, or automated monitoring ships in Phase 03.
 - A future monitoring adapter must submit candidates through the same normalization boundary as the manual adapter and cannot publish them.
 - The first published snapshot establishes a baseline. It does not create a diff, impact assessment, or change task.
@@ -312,14 +312,14 @@ Approval, task materialization, and the tenant audit append commit together. Rej
 
 ### Platform operator
 
-An internal protected command accepts:
+An internal protected platform command endpoint accepts:
 
-- a UTF-8 text/Markdown content path;
+- bounded UTF-8 text/Markdown content in the request body;
 - a validated metadata manifest;
 - an idempotency key;
-- an explicit capture or publish operation.
+- an explicit capture, publish, reject, or withdraw operation.
 
-The command prints only identifiers, hashes, state, and safe validation errors. It does not print source content, credentials, or provider responses.
+The endpoint is not linked from customer navigation. It obtains operator identity, MFA, recent-authentication evidence, and correlation only from the verified Phase 02 WorkOS session; body-supplied identity or tenant authority is rejected. It returns only identifiers, hashes, state, and safe validation errors. It does not return source content, credentials, or provider responses.
 
 ### Quality Lead
 
@@ -356,9 +356,9 @@ The UI uses “records,” “suggests,” and “indicates.” It never labels 
 
 ## Retention and deletion
 
-Phase 03 performs no automatic deletion of catalog, assessment, revision, decision, task, or audit records. Catalog records are immutable reference evidence. Tenant records remain subject to legal holds and a future approved record-class retention policy; Phase 03 does not invent a statutory retention claim for rule-management records.
+Phase 03 performs no automatic deletion of catalog, assessment, revision, decision, task, or audit records. Catalog records are immutable reference evidence. New platform-event and tenant record classes bind immutable seven-year product-policy retention-rule versions so they remain compatible with the Phase 02 class-matched retention boundary. This is a product evidence-preservation baseline, not a statutory retention claim or permission to purge.
 
-Production enablement requires an approved retention rule for each new tenant record class. Until then, cleanup jobs for these classes remain disabled.
+Tenant records remain subject to legal holds. Cleanup jobs for every Phase 03 class stay disabled until legal/privacy review explicitly authorizes destructive processing; later retention-rule versions apply prospectively.
 
 ## Testing strategy
 
